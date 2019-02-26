@@ -12,6 +12,7 @@ from pyaudio import PyAudio, paInt16
 import time
 
 # https://www.cnblogs.com/LXP-Never/p/10078200.html
+# http://www.voidcn.com/article/p-mitujaml-bth.html
 """
 framerate=8000
 NUM_SAMPLES=2000
@@ -40,14 +41,16 @@ def save_wave_file(filename, data, channels=1, sampwidth=2, framerate=8000):
     wf.writeframes(b"".join(data))
     wf.close()
 
-
-def record(filename="01.wav" ,framerate=8000, format=paInt16, channels=1, num_samples=2000, seconds=2):
+# num_samples这个参数的意义？？
+def record(filename="test.wav",seconds=10,
+           framerate=8000, format=paInt16, channels=1, num_samples=2000):
     p=PyAudio()
     stream=p.open(format = format,channels=channels,
                    rate=framerate,input=True,
                    frames_per_buffer=num_samples)
     my_buf=[]
     # 控制录音时间
+    print("start the recording !")
     start = time.time()
     while time.time() - start < seconds:
         # 一次性录音采样字节大小
@@ -58,8 +61,8 @@ def record(filename="01.wav" ,framerate=8000, format=paInt16, channels=1, num_sa
     stream.close()
     print("{} seconds record has completed.".format(seconds))
 
-
-def play(filename="01.wav", chunk=1024):
+# problem播放结束后，程序未终止？
+def play(filename="test.wav", chunk=1024):
     wf=wave.open(filename,'rb')
     p=PyAudio()
     stream=p.open(format=p.get_format_from_width(wf.getsampwidth()),channels=
@@ -67,7 +70,8 @@ def play(filename="01.wav", chunk=1024):
     start = time.time()
     while True:
         data=wf.readframes(chunk)
-        if data=="":
+        print(type(data))
+        if data == "":
             break
         stream.write(data)
     stream.stop_stream()
@@ -77,8 +81,17 @@ def play(filename="01.wav", chunk=1024):
     print("{} seconds".format(time.time() - start))
 
 
+def playback(filename='test.wav'):
+    rate, audio = read(filename)
+    wavfile.write('reverse' + filename, rate, audio[::-1])
+    play(filename='reverse' + filename)
+    print("complete!")
+
+
 if __name__=="__main__":
-    # play()
-    rate, audio = read(filename='01.wav')
-    print(rate, audio)
+    # record()
+    # playback(filename='test.wav')
+    # rate, audio = read(filename='01.wav')
+    # print(rate, audio)
+    # print(audio[::-1])
     play()
