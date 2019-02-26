@@ -11,8 +11,6 @@ import numpy as np
 from pyaudio import PyAudio, paInt16
 import time
 
-# https://www.cnblogs.com/LXP-Never/p/10078200.html
-# http://www.voidcn.com/article/p-mitujaml-bth.html
 """
 framerate=8000
 NUM_SAMPLES=2000
@@ -20,14 +18,12 @@ channels=1
 sampwidth=2
 TIME=2
 """
-
-
-def wave_read(filename=None):
+def wave_read(filename='test.wav'):
     audio = wave.open(filename, mode='rb')
     return audio
 
 
-def read(filename=None):
+def read(filename='test.wav'):
     sampling_freq, audio = wavfile.read(filename)
     return sampling_freq, audio
 
@@ -41,13 +37,13 @@ def save_wave_file(filename, data, channels=1, sampwidth=2, framerate=8000):
     wf.writeframes(b"".join(data))
     wf.close()
 
+
 # num_samples这个参数的意义？？
 def record(filename="test.wav",seconds=10,
            framerate=8000, format=paInt16, channels=1, num_samples=2000):
     p=PyAudio()
-    stream=p.open(format = format,channels=channels,
-                   rate=framerate,input=True,
-                   frames_per_buffer=num_samples)
+    stream=p.open(format = format, channels=channels, rate=framerate,
+                  input=True, frames_per_buffer=num_samples)
     my_buf=[]
     # 控制录音时间
     print("start the recording !")
@@ -61,31 +57,75 @@ def record(filename="test.wav",seconds=10,
     stream.close()
     print("{} seconds record has completed.".format(seconds))
 
-# problem播放结束后，程序未终止？
+
 def play(filename="test.wav", chunk=1024):
     wf=wave.open(filename,'rb')
     p=PyAudio()
-    stream=p.open(format=p.get_format_from_width(wf.getsampwidth()),channels=
-    wf.getnchannels(),rate=wf.getframerate(),output=True)
+    stream=p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                  channels=wf.getnchannels(),rate=wf.getframerate(),
+                  output=True)
     start = time.time()
     while True:
         data=wf.readframes(chunk)
-        print(type(data))
-        if data == "":
+        # char b is absolutely necessary. It represents that the str is byte.
+        # For more detail, please refer to 3,4
+        if data == b"":
             break
         stream.write(data)
+
     stream.stop_stream()
     stream.close()
-    wf.close()
     p.terminate()
     print("{} seconds".format(time.time() - start))
 
 
-def playback(filename='test.wav'):
+def playback(filename='test.wav', silent=False):
     rate, audio = read(filename)
-    wavfile.write('reverse' + filename, rate, audio[::-1])
-    play(filename='reverse' + filename)
+    new_filename = 'reverse_' + filename
+    wavfile.write(new_filename, rate, audio[::-1])
+    if not silent:
+        play(filename=new_filename)
     print("complete!")
+
+
+def change_rate(filename='test.wav', new_rate=4000, silent=False):
+    rate, audio = read(filename)
+    print("the original frequent rate is {}".format(rate))
+    new_filename = str(new_rate) + "_" + filename
+    wavfile.write(new_filename, new_rate, audio)
+    if not silent:
+        play(filename=new_filename)
+    print("complete !")
+
+def change_volume(filename='test.wav', volume_rate=1, silent=False):
+    rate, audio = read(filename)
+    print("change volume to {}".format(volume_rate))
+    new_filename = str(volume_rate) + "_" + filename
+    new_audio = (audio*volume_rate).astype('int16')
+    # print(audio.dtype, new_audio.dtype)
+    wavfile.write(new_filename, rate, new_audio)
+    if not silent:
+        play(filename=new_filename)
+    print("complete !")
+
+# 定义合成音调
+def Synthetic_tone(freq, duration=2, amp=1000, sampling_freq=44100):
+    # 建立时间轴
+    # scaling_factor = pow(2, 15) - 1  # 转换为16位整型数
+    t = np.linspace(0, duration, duration * sampling_freq)
+    # 构建音频信号
+    audio = amp * np.sin(2 * np.pi * freq * t)
+    return audio.astype(np.int16)
+
+
+def simple_music(tone='A', duration=2, amplitude=10000, sampling_freq=44100):
+    tone_freq_map = {'A': 440, 'Asharp': 466, 'B': 494, 'C': 523, 'Csharp': 554,
+                    'D': 587, 'Dsharp': 622, 'E': 659, 'F': 698, 'Fsharp': 740,
+                    'G': 784, 'Gsharp': 831}
+
+    synthesized_tone = Synthetic_tone(tone_freq_map[tone], duration, amplitude, sampling_freq)
+    wavfile.write('{}.wav'.format(tone), sampling_freq, synthesized_tone)
+    play('{}.wav'.format(tone))
 
 
 if __name__=="__main__":
@@ -94,4 +134,13 @@ if __name__=="__main__":
     # rate, audio = read(filename='01.wav')
     # print(rate, audio)
     # print(audio[::-1])
-    play()
+    # change_volume(volume_rate=1)
+    """
+    duration = 4
+    music = 0.9*Synthetic_tone(freq=440, duration=duration) + \
+            0.75*Synthetic_tone(freq=880, duration=duration)
+    wavfile.write('music.wav', 44100, music.astype('int16'))
+    play(filename='music.wav')
+
+    """
+    simple_music(tone='Gsharp')
