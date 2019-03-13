@@ -119,19 +119,6 @@ def label(mat_file):
 
 
 if __name__=='__main__':
-    """
-    matfile = glob.glob(r'dataset\VAD\*.mat')
-    wavfile = glob.glob(r'dataset\VAD\*.wav')
-
-    # print(matfile)
-    for mat, wav in zip(matfile, wavfile):
-        f = wave_read(wav)
-        params = f.getparams()
-        nchannels, sampwidth, framerate, nframes = params[:4]
-        print(params[:4])
-        mat1 = loadmat(mat)
-        print(mat1['y_label'].sum()/mat1['y_label'].shape[0])
-    """
     wavfile = glob.glob(r'dataset\VAD\*.wav')
     matfile = glob.glob(r'dataset\VAD\*.mat')
 
