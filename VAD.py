@@ -17,7 +17,7 @@ import seaborn as sns
 from sklearn import metrics
 from bayes_opt import BayesianOptimization
 import pickle as pkl
-import multiprocessing
+from scipy import signal
 # 计算每一帧的过零率
 def ZCR(frameData):
     frameNum = frameData.shape[1]
@@ -45,11 +45,14 @@ def enframe(wavData, frameSize, overlap):
 
     for i in range(frameNum):
         singleFrame = wavData[np.arange(i * step, min(i * step + frameSize, wlen))]
+        # b, a = signal.butter(8, 1, 'lowpass')
+        # filtedData = signal.filtfilt(b, a, data)
         # singleFrame = np.append(singleFrame[0], singleFrame[:-1] - coef * singleFrame[1:]) # 预加重
         frameData[:len(singleFrame), i] = singleFrame.reshape(-1, 1)[:, 0]
         # frameData[:, i] = hamwin * frameData[:, i] # 加窗
 
     return frameData
+
 
 # 计算每一帧能量
 def energy(frameData):
@@ -66,11 +69,13 @@ def energy(frameData):
 
 def feature(waveData):
     # print("feature extract !")
-    return ZCR(waveData), energy(waveData)
+    power = energy(waveData)
+    zcr = ZCR(waveData) * (power>0.2)
+    return zcr, power
 
 
 # framesize为帧长，overlap为帧移
-def wavdata(wavfile, framesize=240, overlap=0):
+def wavdata(wavfile, framesize=160, overlap=0):
     f = wave_read(wavfile)
     params = f.getparams()
     nchannels, sampwidth, framerate, nframes = params[:4]
@@ -83,9 +88,9 @@ def wavdata(wavfile, framesize=240, overlap=0):
 
 
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
-def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4,):
+def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4):
     # 最短语音帧数
-    min_len = 21
+    min_len = 20
     # 标记量,status：0为静音状态，1为清音状态，2为浊音状态
     status = 0
     # speech = 0
@@ -98,7 +103,6 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4,):
 
     # amph = power.max() / 8
     # ampl = power.max() / 16
-
     # amph = 10
     # ampl = 1
     # print(np.mean(power, axis=0))
@@ -130,9 +134,9 @@ def optimize(X, y):
     sns.distplot(power)
     plt.show()
     params ={
-        'zcr_gate': (20, 50),
-        'ampl': (0.1, 2),
-        'amph': (2.1, 15)
+        'zcr_gate': (25, 50),
+        'ampl': (0.4, 3),
+        'amph': (5, 10)
     }
     y = y.reshape(1, -1)
     def cv(zcr_gate, ampl, amph):
@@ -157,16 +161,31 @@ def optimize(X, y):
 def label(mat_file):
     mat = loadmat(mat_file)
     y_label = mat['y_label']
-    y_label = enframe(y_label, frameSize=256, overlap=0)
+    y_label = enframe(y_label, frameSize=160, overlap=0)
     label_sum = np.sort(y_label.sum(axis=0))
     y_label = np.where(label_sum > 0, 1, 0)
 
     return y_label
 
 
+
 if __name__=='__main__':
     wavfile = glob.glob(r'dataset\VAD\*.wav')
     matfile = glob.glob(r'dataset\VAD\*.mat')
+
+    """
+    wav = wavfile[0]
+    start = time.time()
+    print(wav.split('\\')[-1])
+    data = wavdata(wav)
+    
+    zcr, power = feature(data)
+    plt.plot(zcr[:300])
+    plt.show()
+    plt.plot(power[:300])
+    
+    plt.show()
+    """
 
     """
     zcr, power = feature(wavdata(wavfile[0]))
@@ -175,31 +194,25 @@ if __name__=='__main__':
 
     best_params = []
 
+
+
     def optmize(wav, mat):
         start = time.time()
         print(wav.split('\\')[-1])
         data = wavdata(wav)
         y_label = label(mat)
-        y_label = y_label.reshape(-1 ,1)
+        y_label = y_label.reshape(-1, 1)
 
-        best_params.append(optimize(data, y_label))
+        param = optimize(data, y_label)
         end = time.time()
         print('spend {}s'.format(end - start))
-    # for wav, mat in zip(wavfile, matfile)
-    start = time.time()
-    p1 = multiprocessing.Process(target=optimize, args=(wavfile[0],matfile[0]))
-    """
-    p2 = multiprocessing.Process(target=optimize, args=(wavfile[1],matfile[1]))
-    p3 = multiprocessing.Process(target=optimize, args=(wavfile[2],matfile[2]))
-    p4 = multiprocessing.Process(target=optimize, args=(wavfile[3],matfile[3]))
-    p1.start()
-    p2.start()
-    p3.start()
-    p4.start()
-    """
-    p1.start()
-    end = time.time()
-    print('spend {}s'.format(end - start))
+
+        return param
+
+
+    for wav, mat in zip(wavfile, matfile):
+        best_params.append(optmize(wav, mat))
+
     """
     zcr, power = feature(data)
     res = VAD_detection(zcr, power)
