@@ -17,6 +17,7 @@ import seaborn as sns
 from sklearn import metrics
 from bayes_opt import BayesianOptimization
 import pickle as pkl
+import multiprocessing
 # 计算每一帧的过零率
 def ZCR(frameData):
     frameNum = frameData.shape[1]
@@ -69,7 +70,7 @@ def feature(waveData):
 
 
 # framesize为帧长，overlap为帧移
-def wavdata(wavfile, framesize=256, overlap=0):
+def wavdata(wavfile, framesize=240, overlap=0):
     f = wave_read(wavfile)
     params = f.getparams()
     nchannels, sampwidth, framerate, nframes = params[:4]
@@ -84,7 +85,7 @@ def wavdata(wavfile, framesize=256, overlap=0):
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
 def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4,):
     # 最短语音帧数
-    min_len = 16
+    min_len = 21
     # 标记量,status：0为静音状态，1为清音状态，2为浊音状态
     status = 0
     # speech = 0
@@ -124,10 +125,14 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4,):
 
 def optimize(X, y):
     zcr, power = feature(X)
+    sns.distplot(zcr)
+    plt.show()
+    sns.distplot(power)
+    plt.show()
     params ={
-        'zcr_gate': (zcr.mean(), zcr.mean()*4),
-        'ampl': (power.mean()/16, power.mean()/4),
-        'amph': (power.mean()/2, power.mean()*2)
+        'zcr_gate': (20, 50),
+        'ampl': (0.1, 2),
+        'amph': (2.1, 15)
     }
     y = y.reshape(1, -1)
     def cv(zcr_gate, ampl, amph):
@@ -141,7 +146,7 @@ def optimize(X, y):
     BO = BayesianOptimization(cv, params)
 
     start_time = time.time()
-    BO.maximize(init_points=5, n_iter=30)
+    BO.maximize(n_iter=30)
     end_time = time.time()
     print("Final result:{}, spend {}s".format(BO.max, end_time - start_time))
     best_params = BO.max['params']
@@ -165,14 +170,12 @@ if __name__=='__main__':
 
     """
     zcr, power = feature(wavdata(wavfile[0]))
-    sns.distplot(zcr)
-    plt.show()
-    sns.distplot(power)
-    plt.show()
+
     """
 
     best_params = []
-    for wav, mat in zip(wavfile, matfile):
+
+    def optmize(wav, mat):
         start = time.time()
         print(wav.split('\\')[-1])
         data = wavdata(wav)
@@ -180,25 +183,41 @@ if __name__=='__main__':
         y_label = y_label.reshape(-1 ,1)
 
         best_params.append(optimize(data, y_label))
-
-        """
-        zcr, power = feature(data)
-        res = VAD_detection(zcr, power)
-
-        accuracy = (y_label==res).sum()/y_label.shape[0]
         end = time.time()
-        print("accuracy is {:.2%}, for {}, spend {}s".format(accuracy, wav.split('\\')[-1], end - start))
+        print('spend {}s'.format(end - start))
+    # for wav, mat in zip(wavfile, matfile)
+    start = time.time()
+    p1 = multiprocessing.Process(target=optimize, args=(wavfile[0],matfile[0]))
+    """
+    p2 = multiprocessing.Process(target=optimize, args=(wavfile[1],matfile[1]))
+    p3 = multiprocessing.Process(target=optimize, args=(wavfile[2],matfile[2]))
+    p4 = multiprocessing.Process(target=optimize, args=(wavfile[3],matfile[3]))
+    p1.start()
+    p2.start()
+    p3.start()
+    p4.start()
+    """
+    p1.start()
+    end = time.time()
+    print('spend {}s'.format(end - start))
+    """
+    zcr, power = feature(data)
+    res = VAD_detection(zcr, power)
 
-        y_label = y_label.reshape(1, -1)
-        res = res.reshape(1, -1)
-        print((y_label==0).sum()/y_label.shape[1])
-        # print(confusion_matrix(y_label[0], res[0]))
-        # print(metrics.precision_score(y_label[0], res[0]))
-        # print(metrics.recall_score(y_label[0], res[0]))
-        np.set_printoptions(precision=2)
-        plot_confusion_matrix(y_label[0].tolist(), res[0].tolist(), classes=['no voices', 'voice'], normalize=False)
-        plt.show()
-        break
-        """
+    accuracy = (y_label==res).sum()/y_label.shape[0]
+    end = time.time()
+    print("accuracy is {:.2%}, for {}, spend {}s".format(accuracy, wav.split('\\')[-1], end - start))
+
+    y_label = y_label.reshape(1, -1)
+    res = res.reshape(1, -1)
+    print((y_label==0).sum()/y_label.shape[1])
+    # print(confusion_matrix(y_label[0], res[0]))
+    # print(metrics.precision_score(y_label[0], res[0]))
+    # print(metrics.recall_score(y_label[0], res[0]))
+    np.set_printoptions(precision=2)
+    plot_confusion_matrix(y_label[0].tolist(), res[0].tolist(), classes=['no voices', 'voice'], normalize=False)
+    plt.show()
+    break
+    """
     with open('param.pkl', 'wb') as f:
         pkl.dump(best_params, f)
