@@ -70,7 +70,7 @@ def energy(frameData):
 def feature(waveData):
     # print("feature extract !")
     power = energy(waveData)
-    zcr = ZCR(waveData) * (power>0.2)
+    zcr = ZCR(waveData) * (power>0.15)
     return zcr, power
 
 
@@ -88,60 +88,95 @@ def wavdata(wavfile, framesize=160, overlap=0):
 
 
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
-def VAD_detection(zcr, power, zcr_gate=35, ampl=1.3, amph=4):
+def VAD_detection(zcr, power, zcr_gate=35, ampl=0.5, amph=1.5):
     # 最短语音帧数
-    min_len = 20
+    min_len = 16
+    # 两段语音间的最短间隔
+    min_distance = 10
     # 标记量,status：0为静音状态，1为清音状态，2为浊音状态
     status = 0
     # speech = 0
     start = 0
     end = 0
-    # zcr, power = feature(waveData)
-    # 结果存储
-    res = np.zeros((zcr.shape[0], 1))
-    # 修正能量门限
+    last_end = -1
 
-    # amph = power.max() / 8
-    # ampl = power.max() / 16
-    # amph = 10
-    # ampl = 1
-    # print(np.mean(power, axis=0))
+    res = np.zeros((zcr.shape[0], 1))
+
     for i in range(zcr.shape[0]):
         if power[i] > amph:
             # 此处是浊音状态，记录end即可
-            end = i
-            status = 2
-
-        elif power[i] > ampl or zcr[i] > zcr_gate:
-            # 此处是清音，如果前一状态是静音，则标记此处为起始点
-            if status==0:
+            if status != 1:
                 start = i
-            status = 1
-            end = i
-        else :
-            if status == 1 and end - start + 1 > min_len:
-                res[start:end+1] = 1
 
+            end = i
+            status = 1
+            # print(start - end)
+        elif end - start + 1 > min_len:
+
+            while(power[start] > ampl or zcr[start] > zcr_gate):
+                start -= 1
+
+            start += 1
+
+            while(power[end] > ampl or zcr[end] > zcr_gate):
+                end += 1
+                if end == power.shape[0]:
+                    break
+
+            end -= 1
+            # print('ok')
+            if last_end > 0 and start - last_end < min_distance:
+                res[last_end : end + 1] = 1
+                last_end = end
+            else:
+                res[start: end + 1] = 1
+
+            start = 0
+            end = 0
             status = 0
 
     return res
+"""
+这个方法有问题，就是持续的噪声，会误判成清音。
+for i in range(zcr.shape[0]):
+    if power[i] > amph:
+        # 此处是浊音状态，记录end即可
+        end = i
+        speech = 1
+    
+    elif power[i] > ampl or zcr[i] > zcr_gate:
+        # 此处是清音，如果前一状态是静音，则标记此处为起始点
+        if status==0:
+            start = i
+        status = 1
+        end = i
+    else :
+        if status == 1 and speech == 1 and end - start + 1 > min_len:
+            res[start:end+1] = 1
+    
+        status = 0
+        speech = 0
+"""
 
 
 def optimize(X, y):
     zcr, power = feature(X)
+    """
     sns.distplot(zcr)
     plt.show()
     sns.distplot(power)
     plt.show()
+    """
     params ={
-        'zcr_gate': (25, 50),
-        'ampl': (0.4, 3),
-        'amph': (5, 10)
+        'zcr_gate': (50, 60),
+        'ampl': (0.3, 3),
+        'amph': (10, 15)
     }
     y = y.reshape(1, -1)
+
     def cv(zcr_gate, ampl, amph):
         res = VAD_detection(zcr, power, zcr_gate=zcr_gate, amph=amph, ampl=ampl)
-
+        # print((res==0).sum()/res.shape[0])
         res = res.reshape(1, -1)
         # metrics.precision_score(y[0], res[0])
         # accuracy = (y == res).sum() / y.shape[0]
@@ -167,12 +202,30 @@ def label(mat_file):
 
     return y_label
 
+def main(wav, mat):
+    start = time.time()
+    print(wav.split('\\')[-1])
+    data = wavdata(wav)
+    y_label = label(mat)
+    y_label = y_label.reshape(-1, 1)
+
+    param = optimize(data, y_label)
+    end = time.time()
+    print('spend {}s'.format(end - start))
+
+    return param
 
 
 if __name__=='__main__':
     wavfile = glob.glob(r'dataset\VAD\*.wav')
     matfile = glob.glob(r'dataset\VAD\*.mat')
+    best_params = []
 
+    for wav, mat in zip(wavfile, matfile):
+        best_params.append(main(wav, mat))
+
+    with open('param.pkl', 'wb') as f:
+        pkl.dump(best_params, f)
     """
     wav = wavfile[0]
     start = time.time()
@@ -192,26 +245,6 @@ if __name__=='__main__':
 
     """
 
-    best_params = []
-
-
-
-    def optmize(wav, mat):
-        start = time.time()
-        print(wav.split('\\')[-1])
-        data = wavdata(wav)
-        y_label = label(mat)
-        y_label = y_label.reshape(-1, 1)
-
-        param = optimize(data, y_label)
-        end = time.time()
-        print('spend {}s'.format(end - start))
-
-        return param
-
-
-    for wav, mat in zip(wavfile, matfile):
-        best_params.append(optmize(wav, mat))
 
     """
     zcr, power = feature(data)
@@ -232,5 +265,3 @@ if __name__=='__main__':
     plt.show()
     break
     """
-    with open('param.pkl', 'wb') as f:
-        pkl.dump(best_params, f)
