@@ -106,9 +106,15 @@ def spectrum_entropy(frameData):
 
 def feature(waveData):
     # print("feature extract !")
+    start = time.time()
     power = energy(waveData)
-    zcr = ZCR(waveData) * (power>0.2)
+    zcr = ZCR(waveData) * (power>0.1)
+    end = time.time()
     spectrumentropy = spectrum_entropy(waveData)
+
+    print('feature extract completed, time feature spend {}s, frequency domain spend {}s'.
+          format(end-start, time.time() - end))
+
     return zcr, power, spectrumentropy
 
 
@@ -126,11 +132,11 @@ def wavdata(wavfile):
 
 
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
-def VAD_detection(zcr, power, zcr_gate=35, ampl=0.5, amph=1.5):
+def VAD_detection(zcr, power, zcr_gate=35, ampl=1, amph=6):
     # 最短语音帧数
     min_len = 16
     # 两段语音间的最短间隔
-    min_distance = 10
+    min_distance = 21
     # 标记量,status：0为静音状态，1为清音状态，2为浊音状态
     status = 0
     # speech = 0
@@ -162,7 +168,6 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=0.5, amph=1.5):
                     break
 
             end -= 1
-            # print('ok')
             if last_end > 0 and start - last_end < min_distance:
                 res[last_end : end + 1] = 1
                 last_end = end
@@ -176,8 +181,8 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=0.5, amph=1.5):
     return res
 
 
-def VAD_frequency():
-    pass
+def VAD_frequency(spectrum):
+    return np.where(spectrum>0.35, 0, 1)
 
 
 def optimize(X, y):
@@ -189,7 +194,7 @@ def optimize(X, y):
     plt.show()
     """
     params ={
-        'zcr_gate': (10, 30),
+        'zcr_gate': (20, 40),
         'ampl': (0.3, 4),
         'amph': (5, 15)
     }
@@ -222,72 +227,36 @@ def label(mat_file):
     return np.where(y_label.sum(axis=0) > 0, 1, 0)
 
 
-
 def main(wav, mat):
     start = time.time()
     print(wav.split('\\')[-1])
     data = wavdata(wav)
     y_label = label(mat)
     y_label = y_label.reshape(-1, 1)
+    zcr, power, spectrumentropy = feature(data)
 
-    param = optimize(data, y_label)
+    s1 = time.time()
+    res1 = VAD_detection(zcr, power)
+    s2 = time.time()
+    # res1 = res1.reshape(1, -1)
+    res2 = VAD_frequency(spectrumentropy)
     end = time.time()
-    print('spend {}s'.format(end - start))
+    # res2 = res2.reshape(1, -1)
+    td = metrics.f1_score(y_label, res1)
+    fd = metrics.f1_score(y_label, res2)
+    np.set_printoptions(precision=2)
 
-    return param
+    plot_confusion_matrix(y_label.tolist(), res1.tolist(), classes=['silence', 'speech'], normalize=False)
+    plt.savefig(wav.split('\\')[-1].split('.')[0] + '.png')
+    plt.show()
+    end = time.time()
+    print('time domain res:{:.2%}, spend {}s, frequency domain res:{:.2%}, spend {}s, '
+          'spend {}s totally'.format(td, s2-s1, fd, end-s2, end - start))
 
 
 if __name__=='__main__':
     wavfile = glob.glob(r'dataset\VAD\*.wav')
     matfile = glob.glob(r'dataset\VAD\*.mat')
-    best_params = []
-
-
-    # print(y_label.sum(), y_label.shape[0])
 
     for wav, mat in zip(wavfile, matfile):
-        best_params.append(main(wav, mat))
-
-    with open('param.pkl', 'wb') as f:
-        pkl.dump(best_params, f)
-
-
-    """
-    wav = wavfile[0]
-    start = time.time()
-    print(wav.split('\\')[-1])
-    data = wavdata(wav)
-    
-    zcr, power = feature(data)
-    plt.plot(zcr[:300])
-    plt.show()
-    plt.plot(power[:300])
-    
-    plt.show()
-    """
-
-    """
-    zcr, power = feature(wavdata(wavfile[0]))
-
-    """
-
-
-    """
-    zcr, power = feature(data)
-    res = VAD_detection(zcr, power)
-
-    accuracy = (y_label==res).sum()/y_label.shape[0]
-    end = time.time()
-    print("accuracy is {:.2%}, for {}, spend {}s".format(accuracy, wav.split('\\')[-1], end - start))
-
-    y_label = y_label.reshape(1, -1)
-    res = res.reshape(1, -1)
-    print((y_label==0).sum()/y_label.shape[1])
-    # print(confusion_matrix(y_label[0], res[0]))
-    # print(metrics.precision_score(y_label[0], res[0]))
-    # print(metrics.recall_score(y_label[0], res[0]))
-    np.set_printoptions(precision=2)
-    plot_confusion_matrix(y_label[0].tolist(), res[0].tolist(), classes=['no voices', 'voice'], normalize=False)
-    plt.show()
-    break
-    """
+        main(wav, mat)
