@@ -19,22 +19,18 @@ from bayes_opt import BayesianOptimization
 import pickle as pkl
 from scipy import signal
 # 计算每一帧的过零率
-def ZCR(frameData):
-    frameNum = frameData.shape[1]
-    frameSize = frameData.shape[0]
-    zcr = np.zeros((frameNum, 1))
 
-    for i in range(frameNum):
-        singleFrame = frameData[:, i]
-        temp = singleFrame[:frameSize-1] * singleFrame[1:frameSize]
-        temp = np.sign(temp)
-        zcr[i] = np.sum(temp<0)
-
-    return zcr
+frameSize = 256
+overlap = 128
 
 # 分帧处理函数
 # 不加窗
-def enframe(wavData, frameSize, overlap):
+def enframe(wavData):
+    """
+    frame the wav data, according to frameSize and overlap
+    :param wavData: the input wav data, ndarray
+    :return:frameData, shape
+    """
     # coef = 0.97 # 预加重系数
     wlen = wavData.shape[0]
     step = frameSize - overlap
@@ -54,6 +50,19 @@ def enframe(wavData, frameSize, overlap):
     return frameData
 
 
+def ZCR(frameData):
+    frameNum = frameData.shape[1]
+    frameSize = frameData.shape[0]
+    zcr = np.zeros((frameNum, 1))
+
+    for i in range(frameNum):
+        singleFrame = frameData[:, i]
+        temp = singleFrame[:frameSize-1] * singleFrame[1:frameSize]
+        temp = np.sign(temp)
+        zcr[i] = np.sum(temp<0)
+
+    return zcr
+
 # 计算每一帧能量
 def energy(frameData):
     frameNum = frameData.shape[1]
@@ -67,15 +76,44 @@ def energy(frameData):
     return frame_energy
 
 
+def stSpectralEntropy(X, n_short_blocks=10, eps=1e-8):
+    """Computes the spectral entropy"""
+    L = len(X)                         # number of frame samples
+    Eol = np.sum(X ** 2)            # total spectral energy
+
+    sub_win_len = int(np.floor(L / n_short_blocks))   # length of sub-frame
+    if L != sub_win_len * n_short_blocks:
+        X = X[0:sub_win_len * n_short_blocks]
+
+    sub_wins = X.reshape(sub_win_len, n_short_blocks, order='F').copy()  # define sub-frames (using matrix reshape)
+    s = np.sum(sub_wins ** 2, axis=0) / (Eol + eps)                      # compute spectral sub-energies
+    En = -np.sum(s*np.log2(s + eps))                                    # compute spectral entropy
+
+    return En
+
+
+def spectrum_entropy(frameData):
+    frameNum = frameData.shape[1]
+
+    frame_spectrum_entropy = np.zeros((frameNum, 1))
+
+    for i in range(frameNum):
+        X = np.fft.fft(frameData[:, i])
+        frame_spectrum_entropy[i] = stSpectralEntropy(X[:int(frameSize/2)])
+
+    return frame_spectrum_entropy
+
+
 def feature(waveData):
     # print("feature extract !")
     power = energy(waveData)
-    zcr = ZCR(waveData) * (power>0.15)
-    return zcr, power
+    zcr = ZCR(waveData) * (power>0.2)
+    spectrumentropy = spectrum_entropy(waveData)
+    return zcr, power, spectrumentropy
 
 
 # framesize为帧长，overlap为帧移
-def wavdata(wavfile, framesize=160, overlap=0):
+def wavdata(wavfile):
     f = wave_read(wavfile)
     params = f.getparams()
     nchannels, sampwidth, framerate, nframes = params[:4]
@@ -84,7 +122,7 @@ def wavdata(wavfile, framesize=160, overlap=0):
     waveData = np.fromstring(strData, dtype=np.int16)
     # print(waveData.shape)
     waveData = waveData/(max(abs(waveData)))
-    return enframe(waveData, framesize, overlap)
+    return enframe(waveData)
 
 
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
@@ -136,31 +174,14 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=0.5, amph=1.5):
             status = 0
 
     return res
-"""
-这个方法有问题，就是持续的噪声，会误判成清音。
-for i in range(zcr.shape[0]):
-    if power[i] > amph:
-        # 此处是浊音状态，记录end即可
-        end = i
-        speech = 1
-    
-    elif power[i] > ampl or zcr[i] > zcr_gate:
-        # 此处是清音，如果前一状态是静音，则标记此处为起始点
-        if status==0:
-            start = i
-        status = 1
-        end = i
-    else :
-        if status == 1 and speech == 1 and end - start + 1 > min_len:
-            res[start:end+1] = 1
-    
-        status = 0
-        speech = 0
-"""
+
+
+def VAD_frequency():
+    pass
 
 
 def optimize(X, y):
-    zcr, power = feature(X)
+    zcr, power, spectrumentropy = feature(X)
     """
     sns.distplot(zcr)
     plt.show()
@@ -168,9 +189,9 @@ def optimize(X, y):
     plt.show()
     """
     params ={
-        'zcr_gate': (50, 60),
-        'ampl': (0.3, 3),
-        'amph': (10, 15)
+        'zcr_gate': (10, 30),
+        'ampl': (0.3, 4),
+        'amph': (5, 15)
     }
     y = y.reshape(1, -1)
 
@@ -196,11 +217,11 @@ def optimize(X, y):
 def label(mat_file):
     mat = loadmat(mat_file)
     y_label = mat['y_label']
-    y_label = enframe(y_label, frameSize=160, overlap=0)
-    label_sum = np.sort(y_label.sum(axis=0))
-    y_label = np.where(label_sum > 0, 1, 0)
+    y_label = enframe(y_label)
 
-    return y_label
+    return np.where(y_label.sum(axis=0) > 0, 1, 0)
+
+
 
 def main(wav, mat):
     start = time.time()
@@ -221,11 +242,16 @@ if __name__=='__main__':
     matfile = glob.glob(r'dataset\VAD\*.mat')
     best_params = []
 
+
+    # print(y_label.sum(), y_label.shape[0])
+
     for wav, mat in zip(wavfile, matfile):
         best_params.append(main(wav, mat))
 
     with open('param.pkl', 'wb') as f:
         pkl.dump(best_params, f)
+
+
     """
     wav = wavfile[0]
     start = time.time()
