@@ -99,6 +99,7 @@ def spectrum_entropy(frameData):
 
     for i in range(frameNum):
         X = np.fft.fft(frameData[:, i])
+        X = np.abs(X)
         frame_spectrum_entropy[i] = stSpectralEntropy(X[:int(frameSize/2)])
 
     return frame_spectrum_entropy
@@ -132,7 +133,7 @@ def wavdata(wavfile):
 
 
 # 首先判断能量，如果能量低于ampl，则认为是噪音（静音），如果能量高于amph则认为是语音，如果能量处于两者之前则认为是清音。
-def VAD_detection(zcr, power, zcr_gate=35, ampl=1, amph=6):
+def VAD_detection(zcr, power, zcr_gate=35, ampl=0.3, amph=12):
     # 最短语音帧数
     min_len = 16
     # 两段语音间的最短间隔
@@ -182,7 +183,7 @@ def VAD_detection(zcr, power, zcr_gate=35, ampl=1, amph=6):
 
 
 def VAD_frequency(spectrum):
-    return np.where(spectrum>0.35, 0, 1)
+    return np.where(spectrum>0.4, 0, 1)
 
 
 def optimize(X, y):

@@ -1,7 +1,5 @@
 # speech_signal_processing
 
-
-
 ## Reference
 
 1. [python语音处理基础](https://www.cnblogs.com/LXP-Never/p/10078200.html)
