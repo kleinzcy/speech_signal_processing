@@ -2,7 +2,7 @@
 
 ## MFCC
 
-[Here](https://github.com/kleinzcy/speech_signal_processing/)
+[Here](https://github.com/kleinzcy/speech_signal_processing/blob/master/MFCC.md)
 
 ## Reference
 
