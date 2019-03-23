@@ -19,6 +19,8 @@ channels=1
 sampwidth=2
 TIME=2
 """
+
+## 开发计划，后续添加，play(data),data是read函数的输出
 # read .wav file through wave, return a wave object
 def wave_read(filename='test.wav'):
     audio = wave.open(filename, mode='rb')

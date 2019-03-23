@@ -24,5 +24,7 @@
         
        1. 打开要修改的文件。
        2. 点击导出，选择wav格式即可，然后直接点击保存即可。
+       
+10. [audio-mnist-with-person-detection](https://github.com/yogeshjadhav7/audio-mnist-with-person-detection)
    
   
