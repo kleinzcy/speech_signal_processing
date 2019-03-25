@@ -12,6 +12,8 @@ from pyaudio import PyAudio, paInt16
 import time
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
+import sounddevice as sd
+# import soundfile as sf
 """
 framerate=8000
 NUM_SAMPLES=2000
@@ -19,6 +21,12 @@ channels=1
 sampwidth=2
 TIME=2
 """
+
+def get_time(start_time=None):
+    if start_time == None:
+        return time.time()
+    else:
+        return time.time() - start_time
 
 ## 开发计划，后续添加，play(data),data是read函数的输出
 # read .wav file through wave, return a wave object
@@ -64,25 +72,29 @@ def record(filename="test.wav",seconds=10,
     print("{} seconds record has completed.".format(seconds))
 
 
-def play(filename="test.wav", chunk=1024):
-    wf=wave.open(filename,'rb')
-    p=PyAudio()
-    stream=p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                  channels=wf.getnchannels(),rate=wf.getframerate(),
-                  output=True)
-    start = time.time()
-    while True:
-        data=wf.readframes(chunk)
-        # char b is absolutely necessary. It represents that the str is byte.
-        # For more detail, please refer to 3,4
-        if data == b"":
-            break
-        stream.write(data)
+def play(audio=None, sampling_freq=None,  filename=None, chunk=1024):
+    start_time = get_time()
+    if filename==None:
+        # pass
+        sd.play(audio, sampling_freq)
+    else:
+        wf=wave.open(filename,'rb')
+        p=PyAudio()
+        stream=p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                      channels=wf.getnchannels(),rate=wf.getframerate(),
+                      output=True)
+        while True:
+            data=wf.readframes(chunk)
+            # char b is absolutely necessary. It represents that the str is byte.
+            # For more detail, please refer to 3,4
+            if data == b"":
+                break
+            stream.write(data)
 
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-    print("{} seconds".format(time.time() - start))
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+    print("{} seconds".format(get_time(start_time)))
 
 
 def playback(filename='test.wav', silent=False):
@@ -201,4 +213,10 @@ if __name__=="__main__":
     play(filename='music.wav')
 
     """
-    simple_music(tone='Gsharp')
+    # change_rate('../dataset/ASR/train/hyy/hyy1.wav', new_rate=8000)
+    # simple_music(tone='Gsharp')
+    framerate, audio = read('../dataset/ASR/train/hyy/hyy1.wav')
+    downsample = audio[range(0, audio.shape[0], 2), 0]
+    save_wave_file('test.wav', downsample)
+    play(filename='test.wav')
+    # play(downsample, 8000)
