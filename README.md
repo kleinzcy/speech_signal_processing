@@ -5,31 +5,20 @@
 pip install dtw librosa fastdtw tqdm
 ```
 
+## dataset
+download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), code is v661.
+
 ## Experiment Log
-*without others, and Signal normalization*
 
-| DTW |dist|Time(s)| Acc(%) |
+**without others, euclidean, test sample:43**
+
+| DTW |train_sample|Time(s)| Acc(%) |
 |:---:|:---:|:---:|:---:|
-|accelerated_dtw|euclidean|157|67.44|
-|accelerated_dtw|euclidean|157|67.44|
-|accelerated_dtw|euclidean|159|60.47|
-|fastdtw|euclidean|128|55.81|
-|fastdtw|euclidean|134|46.51|
-|fastdtw|euclidean|149|48.84|
+|accelerated_dtw|32|654|100|
+|accelerated_dtw|24|485|95.35|
+|accelerated_dtw|16|306|97.67|
+|accelerated_dtw|8|152|69.77|
 
-*without others, sample two from all train*
-
-| DTW |dist|Time(s)| Acc(%) |
-|:---:|:---:|:---:|:---:|
-|accelerated_dtw|euclidean|156|74.42|
-|accelerated_dtw|euclidean|159|67.44|
-|accelerated_dtw|euclidean|150|74.42|
-
-*without others, all train*
-
-| DTW |dist|Time(s)| Acc(%) |
-|:---:|:---:|:---:|:---:|
-|accelerated_dtw|euclidean|654|100|
 
 ## MFCC
 

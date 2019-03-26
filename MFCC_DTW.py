@@ -121,15 +121,14 @@ def distance_test(x_test, x_train):
     return distance
 
 
-def sample(x, y, sample_num=5):
-    index = random.sample(range(7), sample_num)
+def sample(x, y, sample_num=2, whole_num=8):
+    index = random.sample(range(whole_num), sample_num)
     sample_x = []
     sample_y = []
     for i in range(4):
-        sample_x.append(x[index[0] + 5*i])
-        sample_x.append(x[index[1] + 5*i])
-        sample_y.append(y[index[0] + 5*i])
-        sample_y.append(y[index[1] + 5*i])
+        for _index in index:
+            sample_x.append(x[_index + whole_num*i])
+            sample_y.append(y[_index + whole_num*i])
     return sample_x, sample_y
 
 def load_wav(path='dataset/ASR/train', mfcc_extract=MFCC):
@@ -177,7 +176,7 @@ def vote(label):
 
 def test(threshold=100):
     x_train,y_train = load_wav(path='dataset/ASR/train')
-    # x_train,y_train = sample(x_train, y_train)
+    x_train,y_train = sample(x_train, y_train)
     x_test,y_test = load_wav(path='dataset/ASR/test')
     y_pred = []
     # print(len(x_train))
