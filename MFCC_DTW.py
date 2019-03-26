@@ -12,10 +12,10 @@ from utils.processing import enframe, stMFCC, mfccInitFilterBanks
 import numpy as np
 from scipy.fftpack import fft
 
-from scipy.spatial.distance import euclidean,cosine
-
+import librosa
 # dtw is accurate than fastdtw, but it is slower, I will test the speed and acc later
-# from dtw import dtw,accelerated_dtw
+from scipy.spatial.distance import euclidean,cosine
+from dtw import dtw,accelerated_dtw
 from fastdtw import fastdtw
 
 import matplotlib.pyplot as plt
@@ -25,7 +25,19 @@ from tqdm import tqdm
 
 eps = 1e-8
 
+def MFCC_lib(raw_signal, n_mfcc=13):
+    feature = librosa.feature.mfcc(raw_signal.astype('float32'), n_mfcc=n_mfcc, sr=8000)
+    # print(feature.T.shape)
+    return feature.T.flatten()
+
 def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
+    # Signal normalization
+    raw_signal = np.double(raw_signal)
+
+    raw_signal = raw_signal / (2.0 ** 15)
+    DC = raw_signal.mean()
+    MAX = (np.abs(raw_signal)).max()
+    raw_signal = (raw_signal - DC) / (MAX + eps)
     nFFT = int(frameSize/2)
     [fbank, freqs] = mfccInitFilterBanks(fs, nFFT)
     n_mfcc_feats = 13
@@ -40,27 +52,31 @@ def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
         feature.append(stMFCC(X, fbank, n_mfcc_feats))
 
     feature = np.array(feature)
+    # print(feature.shape)
     return feature.flatten()
 
 
-def distance_dtw(sample_x, sample_y, show=False):
+def distance_dtw(sample_x, sample_y, show=False, dtw_method=2, dist=euclidean):
     """
     calculate the distance between sample_x and sample_y using dtw
     :param sample_x: ndarray, mfcc feature for each frame
     :param sample_y: the same as sample_x
     :param show: bool, if true, show the path
+    :param dtw_method: 1:accelerated_dtw, 2:fastdtw
     :return: the euclidean distance
     """
     # euclidean_norm = lambda x, y: np.abs(x - y)euclidean
     #
-    d, path = fastdtw(sample_x, sample_y, dist=euclidean)
-    """
-    d, cost_matrix, acc_cost_matrix, path = accelerated_dtw(sample_x, sample_y, dist='cosine')
-    if show:
-        plt.imshow(acc_cost_matrix.T, origin='lower', cmap='gray', interpolation='nearest')
-        plt.plot(path[0], path[1], 'w')
-        plt.show()
-    """
+    #
+    if dtw_method==2:
+        d, path = fastdtw(sample_x, sample_y, dist=dist)
+    else:
+        d, cost_matrix, acc_cost_matrix, path = accelerated_dtw(sample_x, sample_y, dist='euclidean')
+        if show:
+            plt.imshow(acc_cost_matrix.T, origin='lower', cmap='gray', interpolation='nearest')
+            plt.plot(path[0], path[1], 'w')
+            plt.show()
+
     return d
 
 
@@ -105,7 +121,7 @@ def sample(x, y, sample_num=2):
         sample_y.append(y[index[1] + 5*i])
     return sample_x, sample_y
 
-def load_wav(path='dataset/ASR/train'):
+def load_wav(path='dataset/ASR/train', mfcc_extract=MFCC):
     """
     load data from dataset/ASR
     :param path: the path of dataset
@@ -123,9 +139,9 @@ def load_wav(path='dataset/ASR/train'):
             # so, I add "try except" to deal with such problem.
             # downsample the data to 8k
             try:
-                x.append(MFCC(data[range(0, data.shape[0], 2), 0]))
+                x.append(mfcc_extract(data[range(0, data.shape[0], 2), 0]))
             except:
-                x.append(MFCC(data[range(0, data.shape[0], 2)]))
+                x.append(mfcc_extract(data[range(0, data.shape[0], 2)]))
 
             y_label.append(_dir)
             del data

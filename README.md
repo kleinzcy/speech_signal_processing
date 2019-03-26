@@ -1,5 +1,20 @@
 # speech_signal_processing
 
+## Requirement
+```
+pip install dtw 
+```
+
+## Experiment Log
+*without others, and Signal normalization*
+
+| DTW |dist|Time(s)| Acc(%) |
+|:---:|:---:|:---:|:---:|
+|accelerated_dtw|euclidean|224|33.33|
+|fastdtw|euclidean|157|67.44|
+|fastdtw|euclidean|128|55.81|
+
+
 ## MFCC
 
 [Here](https://github.com/kleinzcy/speech_signal_processing/blob/master/MFCC.md)
