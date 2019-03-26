@@ -2,7 +2,7 @@
 
 ## Requirement
 ```
-pip install dtw 
+pip install dtw librosa fastdtw tqdm
 ```
 
 ## Experiment Log
@@ -10,10 +10,26 @@ pip install dtw
 
 | DTW |dist|Time(s)| Acc(%) |
 |:---:|:---:|:---:|:---:|
-|accelerated_dtw|euclidean|224|33.33|
-|fastdtw|euclidean|157|67.44|
+|accelerated_dtw|euclidean|157|67.44|
+|accelerated_dtw|euclidean|157|67.44|
+|accelerated_dtw|euclidean|159|60.47|
 |fastdtw|euclidean|128|55.81|
+|fastdtw|euclidean|134|46.51|
+|fastdtw|euclidean|149|48.84|
 
+*without others, sample two from all train*
+
+| DTW |dist|Time(s)| Acc(%) |
+|:---:|:---:|:---:|:---:|
+|accelerated_dtw|euclidean|156|74.42|
+|accelerated_dtw|euclidean|159|67.44|
+|accelerated_dtw|euclidean|150|74.42|
+
+*without others, all train*
+
+| DTW |dist|Time(s)| Acc(%) |
+|:---:|:---:|:---:|:---:|
+|accelerated_dtw|euclidean|654|100|
 
 ## MFCC
 

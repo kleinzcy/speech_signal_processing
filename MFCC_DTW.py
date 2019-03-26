@@ -14,12 +14,12 @@ from scipy.fftpack import fft
 
 import librosa
 # dtw is accurate than fastdtw, but it is slower, I will test the speed and acc later
-from scipy.spatial.distance import euclidean,cosine
+from scipy.spatial.distance import euclidean
 from dtw import dtw,accelerated_dtw
 from fastdtw import fastdtw
 
 import matplotlib.pyplot as plt
-import seaborn as sns
+# import seaborn as sns
 from tqdm import tqdm
 
 
@@ -31,14 +31,25 @@ def MFCC_lib(raw_signal, n_mfcc=13):
     return feature.T.flatten()
 
 def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
+    """
+    extract mfcc feature
+    :param raw_signal: the original audio signal
+    :param fs: sample frequency
+    :param frameSize:the size of each frame
+    :param step:
+    :return: a series of mfcc feature of each frame and flatten to (num, )
+    """
     # Signal normalization
+
+    """
     raw_signal = np.double(raw_signal)
 
     raw_signal = raw_signal / (2.0 ** 15)
     DC = raw_signal.mean()
     MAX = (np.abs(raw_signal)).max()
     raw_signal = (raw_signal - DC) / (MAX + eps)
-    nFFT = int(frameSize/2)
+    """
+    nFFT = int(frameSize)
     [fbank, freqs] = mfccInitFilterBanks(fs, nFFT)
     n_mfcc_feats = 13
 
@@ -56,7 +67,7 @@ def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
     return feature.flatten()
 
 
-def distance_dtw(sample_x, sample_y, show=False, dtw_method=2, dist=euclidean):
+def distance_dtw(sample_x, sample_y, show=False, dtw_method=1, dist=euclidean):
     """
     calculate the distance between sample_x and sample_y using dtw
     :param sample_x: ndarray, mfcc feature for each frame
@@ -70,7 +81,7 @@ def distance_dtw(sample_x, sample_y, show=False, dtw_method=2, dist=euclidean):
     #
     if dtw_method==2:
         d, path = fastdtw(sample_x, sample_y, dist=dist)
-    else:
+    elif dtw_method==1:
         d, cost_matrix, acc_cost_matrix, path = accelerated_dtw(sample_x, sample_y, dist='euclidean')
         if show:
             plt.imshow(acc_cost_matrix.T, origin='lower', cmap='gray', interpolation='nearest')
@@ -110,8 +121,8 @@ def distance_test(x_test, x_train):
     return distance
 
 
-def sample(x, y, sample_num=2):
-    index = random.sample(range(5), sample_num)
+def sample(x, y, sample_num=5):
+    index = random.sample(range(7), sample_num)
     sample_x = []
     sample_y = []
     for i in range(4):
@@ -146,21 +157,35 @@ def load_wav(path='dataset/ASR/train', mfcc_extract=MFCC):
             y_label.append(_dir)
             del data
 
-    # y_label = np.array(y_label)
+    y_label = np.array(y_label)
     # y_label = enc.fit_transform(y_label.reshape(-1, 1))
     print('loading data and extract mfcc feature spend {}s'.format(get_time(start_time)))
     return x,y_label
 
 
+def vote(label):
+    label = np.array(label)
+    _dict = {}
+    for l in label:
+        if l not in _dict:
+            _dict[l] = 1
+        else:
+            _dict[l] += 1
+
+    return sorted(_dict.items(), key=lambda x: x[1], reverse=True)[0][0]
+
+
 def test(threshold=100):
     x_train,y_train = load_wav(path='dataset/ASR/train')
-    x_train,y_train = sample(x_train, y_train)
+    # x_train,y_train = sample(x_train, y_train)
     x_test,y_test = load_wav(path='dataset/ASR/test')
     y_pred = []
-    # x_test = x_test[:5]
-    # y_test = y_test[:5]
+    # print(len(x_train))
+
     for x in tqdm(x_test):
         distance = distance_test(x, x_train)
+        # top = np.argsort(distance)
+        # print(top)
         y_pred.append(y_train[np.argmin(distance)])
         # when I set threshold to 100, the results is very bad, many sample are classified to other,
         # so, I decide to give up threshold,
