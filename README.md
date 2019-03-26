@@ -22,7 +22,7 @@ download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), co
 
 ## MFCC
 
-[Here](https://github.com/kleinzcy/speech_signal_processing/blob/master/MFCC.md)
+[Here](https://kleinzcy.github.io/blog/speech%20signal%20processing/%E6%A2%85%E5%B0%94%E5%80%92%E8%B0%B1%E7%B3%BB%E6%95%B0)
 
 ## Reference
 
