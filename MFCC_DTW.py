@@ -131,13 +131,51 @@ def sample(x, y, sample_num=2, whole_num=8):
             sample_y.append(y[_index + whole_num*i])
     return sample_x, sample_y
 
-def load_wav(path='dataset/ASR/train', mfcc_extract=MFCC):
+
+def load_train(path='dataset/ASR/train', mfcc_extract=MFCC):
     """
     load data from dataset/ASR
     :param path: the path of dataset
     :return: x is train data, y_label is the label of x
     """
     start_time = get_time()
+    # wav_dir is a list, which include four directory in train.
+    wav_dir = os.listdir(path)
+    y_label = []
+    x = []
+    print("Generate template according to train set.")
+    for _dir in tqdm(wav_dir):
+        _x = []
+        for _path in os.listdir(os.path.join(path, _dir)):
+            _, data = read(os.path.join(path, _dir, _path))
+            # Some audio has two channel, but some audio has one channel.
+            # so, I add "try except" to deal with such problem.
+            # downsample the data to 8k
+            try:
+                _x.append(mfcc_extract(data[range(0, data.shape[0], 2), 0]))
+            except:
+                _x.append(mfcc_extract(data[range(0, data.shape[0], 2)]))
+            del data
+            # print(_x[-1].shape)
+        # generate a template of different speaker.
+        x.append(generate_template(_x))
+        y_label.append(_dir)
+
+    print('Loading train data, extract mfcc feature and generate template spend {}s'.format(get_time(start_time)))
+    return x,y_label
+
+
+def load_test(path='dataset/ASR/test', mfcc_extract=MFCC, template=False):
+    """
+    load data from dataset/ASR
+    :param path: the path of dataset
+    :return: x is train data, y_label is the label of x
+    """
+    start_time = get_time()
+    if template:
+        # load template directly.
+        pass
+    # wav_dir is a list, which include four directory in train.
     wav_dir = os.listdir(path)
     y_label = []
     x = []
@@ -152,14 +190,44 @@ def load_wav(path='dataset/ASR/train', mfcc_extract=MFCC):
                 x.append(mfcc_extract(data[range(0, data.shape[0], 2), 0]))
             except:
                 x.append(mfcc_extract(data[range(0, data.shape[0], 2)]))
-
-            y_label.append(_dir)
             del data
+            y_label.append(_dir)
 
-    y_label = np.array(y_label)
-    # y_label = enc.fit_transform(y_label.reshape(-1, 1))
-    print('loading data and extract mfcc feature spend {}s'.format(get_time(start_time)))
+    print('Loading test data and extract mfcc feature spend {}s'.format(get_time(start_time)))
     return x,y_label
+
+
+def generate_template(x):
+    # max_length is the max length of audio in x.
+    max_length = -1
+
+    # max_length_index is the index of max length audio.
+    max_length_index = 0
+    template = None
+    for index, _x in enumerate(x):
+        if _x.shape[0] > max_length:
+            max_length = _x.shape[0]
+            max_length_index = index
+
+    template = x[max_length_index]
+    for index, _x in enumerate(x):
+        if index != max_length_index:
+            d, cost_matrix, acc_cost_matrix, path = accelerated_dtw(_x, template, dist='euclidean')
+            template = (_x[path[0]] + template[path[1]])/2
+            # the dimension of template will arise after previous step,
+            # so I will decrease the dimension of template, to keep it to be the same as initial.
+            pre_road = -1
+            ind = []
+            for current_road in path[1]:
+                if current_road!=pre_road:
+                    ind.append(True)
+                else:
+                    ind.append(False)
+                pre_road = current_road
+
+            template = template[ind]
+
+    return template
 
 
 def vote(label):
@@ -175,9 +243,9 @@ def vote(label):
 
 
 def test(threshold=100):
-    x_train,y_train = load_wav(path='dataset/ASR/train')
-    x_train,y_train = sample(x_train, y_train)
-    x_test,y_test = load_wav(path='dataset/ASR/test')
+    x_train,y_train = load_train(path='dataset/ASR/train')
+    # x_train,y_train = sample(x_train, y_train)
+    x_test,y_test = load_test(path='dataset/ASR/test')
     y_pred = []
     # print(len(x_train))
 
@@ -204,10 +272,20 @@ if __name__=='__main__':
     test()
     """
     x_train,y_train = load_wav(path='dataset/ASR/train')
-    distance = distance_train(x_train)
-    np.savetxt('dis.csv', X=distance, delimiter=',')
+    # distance = distance_dtw(x_train[0], x_train[1])
+    print(x_train[0].shape)
+    d, cost_matrix, acc_cost_matrix, path = accelerated_dtw(x_train[0], x_train[1], dist='euclidean')
+    print(cost_matrix.shape)
+    print(acc_cost_matrix.shape)
+    print('*'*50)
+    print(path[0].shape)
+    print('*'*50)
+    print(path[1].shape)
+    plt.imshow(acc_cost_matrix.T, origin='lower', cmap='gray', interpolation='nearest')
+    plt.plot(path[0], path[1], 'w')
+    plt.show()
     """
 
-
+    # np.savetxt('dis.csv', X=distance, delimiter=',')
     # print(distance_dtw(x[0], x[1], show=True))
     # print(distance_dtw(x[0], x[5], show=True))
