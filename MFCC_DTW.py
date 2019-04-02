@@ -7,7 +7,7 @@
 
 import os
 import random
-from utils.tools import read, get_time
+from utils.tools import read, get_time,plot_confusion_matrix
 from utils.processing import enframe, stMFCC, mfccInitFilterBanks
 import numpy as np
 from scipy.fftpack import fft
@@ -108,7 +108,7 @@ def distance_train(data):
     print('cost {}s'.format(get_time(start_time)))
     return distance
 
-def distance_test(x_test, x_train):
+def distance_test(x_test, x_train, show=False):
     """
     calculate the distance between x_test(one sample) and x_train(many sample)
     :param x_test: a sample
@@ -117,7 +117,7 @@ def distance_test(x_test, x_train):
     """
     distance = np.zeros((1, len(x_train)))
     for index in range(len(x_train)):
-        distance[0, index] = distance_dtw(x_train[index], x_test)
+        distance[0, index] = distance_dtw(x_train[index], x_test, show=show)
     return distance
 
 
@@ -134,7 +134,7 @@ def sample(x, y, sample_num=2, whole_num=8):
 
 def load_train(path='dataset/ASR/train', mfcc_extract=MFCC):
     """
-    load data from dataset/ASR
+    load data from dataset/ASR/train and generate template
     :param path: the path of dataset
     :return: x is train data, y_label is the label of x
     """
@@ -167,7 +167,7 @@ def load_train(path='dataset/ASR/train', mfcc_extract=MFCC):
 
 def load_test(path='dataset/ASR/test', mfcc_extract=MFCC, template=False):
     """
-    load data from dataset/ASR
+    load data from dataset/ASR/test
     :param path: the path of dataset
     :return: x is train data, y_label is the label of x
     """
@@ -248,12 +248,15 @@ def test(threshold=100):
     x_test,y_test = load_test(path='dataset/ASR/test')
     y_pred = []
     # print(len(x_train))
-
+    distances = np.zeros((len(x_test), len(x_train)))
+    index = 0
     for x in tqdm(x_test):
         distance = distance_test(x, x_train)
+        distances[index, :] = distance
         # top = np.argsort(distance)
         # print(top)
         y_pred.append(y_train[np.argmin(distance)])
+        index += 1
         # when I set threshold to 100, the results is very bad, many sample are classified to other,
         # so, I decide to give up threshold,
         """
@@ -266,6 +269,22 @@ def test(threshold=100):
     y_test = np.array(y_test)
     acc = (y_pred==y_test).sum()/y_test.shape[0]
     print("accuracy is {:.2%}".format(acc))
+    # distances = np.concatenate([y_test.reshape(-1,1), distances], axis=1)
+    # print(y_train)
+    np.savetxt('distance.csv', X=distances, delimiter=',')
+    plot_confusion_matrix(y_test, y_pred, classes=y_train)
+    plt.show()
+
+
+def plot(filename):
+    _, audio = read(filename)
+    # 语音图
+    plt.figure()
+    plt.plot(audio)
+    # 频谱图
+    # mel频谱图
+    # DTW路径图
+    pass
 
 
 if __name__=='__main__':

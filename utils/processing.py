@@ -22,6 +22,7 @@ def enframe(wavData, frameSize=400, step=160):
     :param wavData: the input wav data, ndarray
     :return:frameData, shape
     """
+    coef = 0.97
     wlen = wavData.shape[0]
     frameNum = math.ceil(wlen / step)
     frameData = np.zeros((frameSize, frameNum))
@@ -30,6 +31,7 @@ def enframe(wavData, frameSize=400, step=160):
 
     for i in range(frameNum):
         singleFrame = wavData[i * step : min(i * step + frameSize, wlen)]
+        # singleFrame[1:] = singleFrame[:-1] - coef * singleFrame[1:]
         frameData[:len(singleFrame), i] = singleFrame
         frameData[:, i] = window*frameData[:, i]
 

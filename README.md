@@ -20,6 +20,17 @@ download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), co
 |accelerated_dtw|8|152|69.77|
 
 
+**final**
+
+| DTW |Time(s)| Acc(%) |
+|:---:|:---:|:---:|
+|accelerated_dtw|92|83.72|
+|accelerated_dtw+pre-emphasis|105|74.42|
+|fastdtw|71|60.47|
+|fastdtw+pre-emphasis|79|65.12|
+
+
+
 ## MFCC
 
 [Here](https://kleinzcy.github.io/blog/speech%20signal%20processing/%E6%A2%85%E5%B0%94%E5%80%92%E8%B0%B1%E7%B3%BB%E6%95%B0)
