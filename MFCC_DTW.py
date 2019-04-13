@@ -8,7 +8,7 @@
 import os
 import random
 from utils.tools import read, get_time,plot_confusion_matrix
-from utils.processing import enframe, stMFCC, mfccInitFilterBanks
+from utils.processing import enframe, MFCC
 import numpy as np
 from scipy.fftpack import fft
 
@@ -30,7 +30,7 @@ def MFCC_lib(raw_signal, n_mfcc=13):
     # print(feature.T.shape)
     return feature.T.flatten()
 
-def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
+def _MFCC(raw_signal):
     """
     extract mfcc feature
     :param raw_signal: the original audio signal
@@ -49,20 +49,7 @@ def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
     MAX = (np.abs(raw_signal)).max()
     raw_signal = (raw_signal - DC) / (MAX + eps)
     """
-    nFFT = int(frameSize)
-    [fbank, freqs] = mfccInitFilterBanks(fs, nFFT)
-    n_mfcc_feats = 13
-
-    signal = enframe(raw_signal, frameSize, step)
-    feature = []
-    for frame in range(signal.shape[1]):
-        x = signal[:, frame]
-        X = abs(fft(x))  # get fft magnitude
-        X = X[0:nFFT]  # normalize fft
-        X = X / len(X)
-        feature.append(stMFCC(X, fbank, n_mfcc_feats))
-
-    feature = np.array(feature)
+    feature = MFCC(raw_signal, fs=8000, frameSize=512, step=256)
     # print(feature.shape)
     return feature.flatten()
 
@@ -132,7 +119,7 @@ def sample(x, y, sample_num=2, whole_num=8):
     return sample_x, sample_y
 
 
-def load_train(path='dataset/ASR/train', mfcc_extract=MFCC):
+def load_train(path='dataset/ASR/train', mfcc_extract=_MFCC):
     """
     load data from dataset/ASR/train and generate template
     :param path: the path of dataset
@@ -246,6 +233,7 @@ def test(threshold=100):
     x_train,y_train = load_train(path='dataset/ASR/train')
     # x_train,y_train = sample(x_train, y_train)
     x_test,y_test = load_test(path='dataset/ASR/test')
+    # x_test, y_test = x_train,y_train
     y_pred = []
     # print(len(x_train))
     distances = np.zeros((len(x_test), len(x_train)))
@@ -271,7 +259,9 @@ def test(threshold=100):
     print("accuracy is {:.2%}".format(acc))
     # distances = np.concatenate([y_test.reshape(-1,1), distances], axis=1)
     # print(y_train)
-    np.savetxt('distance.csv', X=distances, delimiter=',')
+    # np.savetxt('distance_template.csv', X=distances, delimiter=',')
+    np.savetxt('res.csv', X=(y_pred==y_test), delimiter=',')
+
     plot_confusion_matrix(y_test, y_pred, classes=y_train)
     plt.show()
 

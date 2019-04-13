@@ -9,7 +9,7 @@ import numpy as np
 import math
 from scipy import signal
 from scipy.io import wavfile
-# import read,play
+# from utils.tools import read,play
 from scipy.fftpack.realtransforms import dct
 from scipy.fftpack import fft
 import matplotlib.pyplot as plt
@@ -105,6 +105,44 @@ def stMFCC(X, fbank, n_mfcc_feats):
     mspec = np.log10(np.dot(X, fbank.T)+eps)
     ceps = dct(mspec, type=2, norm='ortho', axis=-1)[:n_mfcc_feats]
     return ceps
+
+
+def MFCC(raw_signal, fs=8000, frameSize=512, step=256):
+    """
+    extract mfcc feature
+    :param raw_signal: the original audio signal
+    :param fs: sample frequency
+    :param frameSize:the size of each frame
+    :param step:
+    :return: a series of mfcc feature of each frame and flatten to (num, )
+    """
+    # Signal normalization
+
+    """
+    raw_signal = np.double(raw_signal)
+
+    raw_signal = raw_signal / (2.0 ** 15)
+    DC = raw_signal.mean()
+    MAX = (np.abs(raw_signal)).max()
+    raw_signal = (raw_signal - DC) / (MAX + eps)
+    """
+    nFFT = int(frameSize)
+    [fbank, freqs] = mfccInitFilterBanks(fs, nFFT)
+    n_mfcc_feats = 13
+
+    signal = enframe(raw_signal, frameSize, step)
+    feature = []
+    for frame in range(signal.shape[1]):
+        x = signal[:, frame]
+        X = abs(fft(x))  # get fft magnitude
+        X = X[0:nFFT]  # normalize fft
+        X = X / len(X)
+        feature.append(stMFCC(X, fbank, n_mfcc_feats))
+
+    feature = np.array(feature)
+    # print(feature.shape)
+    return feature
+
 
 def test():
     path = '../dataset/ASR/zcy/zcy1.wav'

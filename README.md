@@ -10,18 +10,7 @@ download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), co
 
 ## Experiment Log
 
-**without others, euclidean, test sample:43**
-
-| DTW |train_sample|Time(s)| Acc(%) |
-|:---:|:---:|:---:|:---:|
-|accelerated_dtw|32|654|100|
-|accelerated_dtw|24|485|95.35|
-|accelerated_dtw|16|306|97.67|
-|accelerated_dtw|8|152|69.77|
-
-
-**final**
-
+#### MFCC+DTW
 | DTW |Time(s)| Acc(%) |
 |:---:|:---:|:---:|
 |accelerated_dtw|92|83.72|
@@ -29,11 +18,21 @@ download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), co
 |fastdtw|71|60.47|
 |fastdtw+pre-emphasis|79|65.12|
 
-
+#### MFCC+GMM
 
 ## MFCC
 
 [Here](https://kleinzcy.github.io/blog/speech%20signal%20processing/%E6%A2%85%E5%B0%94%E5%80%92%E8%B0%B1%E7%B3%BB%E6%95%B0)
+
+## GMM
+
+[blog](https://appliedmachinelearning.blog/2017/11/14/spoken-speaker-identification-based-on-gaussian-mixture-models-python-implementation/)
+
+[paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.117.338&rep=rep1&type=pdf)
+
+[scikit-learn](https://scikit-learn.org/stable/modules/mixture.html#gmm)
+
+[SIDEKIT](https://pypi.org/project/SIDEKIT/)
 
 ## Reference
 

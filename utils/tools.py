@@ -7,13 +7,19 @@
 
 import wave
 from scipy.io import wavfile
+from scipy.fftpack import fft, ifft
+# import math
+# from scipy import signal
 import numpy as np
 from pyaudio import PyAudio, paInt16
 import time
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
-import sounddevice as sd
-# import soundfile as sf
+# import sounddevice as sd
+import simpleaudio as sa
+
+from utils.processing import enframe
+
 """
 framerate=8000
 NUM_SAMPLES=2000
@@ -72,11 +78,13 @@ def record(filename="test.wav",seconds=10,
     print("{} seconds record has completed.".format(seconds))
 
 
-def play(audio=None, sampling_freq=None,  filename=None, chunk=1024):
+def play(audio=None, sampling_freq=None, filename=None, chunk=1024):
     start_time = get_time()
     if filename==None:
         # pass
-        sd.play(audio, sampling_freq)
+        play_obj = sa.play_buffer(audio, audio.shape[1], 2, sampling_freq)
+        play_obj.wait_done()
+
     else:
         wf=wave.open(filename,'rb')
         p=PyAudio()
@@ -198,7 +206,55 @@ def plot_confusion_matrix(y_true, y_pred, classes,
     fig.tight_layout()
     return ax
 
+
+def test(filename):
+    framerate, audio = read(filename)
+    play(audio, framerate)
+    #　print(audio.shape)
+    audio_frame = enframe(audio[:,0], frameSize=512, step=256)
+    audio_frame_new = np.zeros_like(audio_frame)
+    for frame in range(audio_frame.shape[1]):
+        # print(audio_frame[:, frame])
+        audio_fft = fft(audio_frame[:, frame])
+        # audio_fft_abs = abs(audio_fft)
+        # angle = audio_fft.real/audio_fft_abs
+        audio_fft_new = np.sqrt(0.8)*audio_fft
+        audio_new = ifft(audio_fft_new)
+        # print(audio_new)
+        audio_frame_new[:, frame] = audio_new.real
+        print((audio_new-audio_frame[:, frame]).sum())
+        # break
+    audio_new = audio_frame_new[:256, :].flatten('F')[:audio.shape[0]].reshape(-1, 1)
+    audio_new = np.concatenate([audio_new, audio_new], axis=1)
+    save_wave_file('zero_trans.wav', audio_new)
+    print(audio_new.shape)
+    # print(audio_new.astype(audio.dtype))
+    # audio_fft_abs = np.abs(audio_fft)
+    # angle = audio_fft.real()/audio_fft_abs
+    # audio_fft_abs_new = audio_fft_abs*0.8
+    # au
+    play(audio_new.astype(audio.dtype), framerate)
+    plt.figure()
+    plt.plot(audio[:,0])
+    plt.figure()
+    plt.plot(audio_new[:,0])
+    plt.show()
+
+
+
+
 if __name__=="__main__":
+    test(filename='../dataset/ASR/test/zcy/zcy1.wav')
+    """
+    wave_read = wave.open('../dataset/ASR/test/zcy/zcy1.wav', 'rb')
+    audio_data = wave_read.readframes(wave_read.getnframes())
+    num_channels = wave_read.getnchannels()
+    bytes_per_sample = wave_read.getsampwidth()
+    sample_rate = wave_read.getframerate()
+    print(type(audio_data))
+    play_obj = sa.play_buffer(audio_data, num_channels, bytes_per_sample, sample_rate)
+    """
+
     # record()
     # playback(filename='test.wav')
     # rate, audio = read(filename='01.wav')
@@ -215,8 +271,8 @@ if __name__=="__main__":
     """
     # change_rate('../dataset/ASR/train/hyy/hyy1.wav', new_rate=8000)
     # simple_music(tone='Gsharp')
-    framerate, audio = read('../dataset/ASR/train/hyy/hyy1.wav')
-    downsample = audio[range(0, audio.shape[0], 2), 0]
-    save_wave_file('test.wav', downsample)
-    play(filename='test.wav')
+    # framerate, audio = read('../dataset/ASR/train/hyy/hyy1.wav')
+    # downsample = audio[range(0, audio.shape[0], 2), 0]
+    # save_wave_file('test.wav', downsample)
+    # play(filename='test.wav')
     # play(downsample, 8000)
