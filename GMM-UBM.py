@@ -21,7 +21,7 @@ def load_data(path='dataset/ASR_GMM'):
     """
     load audio file.
     :param path: the dir to audio file
-    :return: x  type:list, y type:list,it is the label of x
+    :return: x  type:list,each element is an audio, y type:list,it is the label of x
     """
     start_time = get_time()
     print("Load data...")
@@ -36,31 +36,51 @@ def load_data(path='dataset/ASR_GMM'):
                 samplerate, audio = read(os.path.join(path2, _wav))
                 # speaker is id10270,id10271 etc.
                 y.append(speaker)
-                # samprate is 16000, you can downsample it to 8000, but the result will be bad.
+                # sample rate is 16000, you can down sample it to 8000, but the result will be bad.
                 x.append(audio)
     print("Complete! Spend {:.2f}s".format(get_time(start_time)))
     return x,y
 
 
-# TODO delta mfcc and plp feature, what's more try to extract MFCC feature
-#  based on lib(like python_speech_features or librosa)
+def delta(feat, N=2):
+    """Compute delta features from a feature vector sequence.
+    :param feat: A numpy array of size (NUMFRAMES by number of features) containing features. Each row holds 1 feature vector.
+    :param N: For each frame, calculate delta features based on preceding and following N frames
+    :returns: A numpy array of size (NUMFRAMES by number of features) containing delta features. Each row holds 1 delta feature vector.
+    """
+    if N < 1:
+        raise ValueError('N must be an integer >= 1')
+    NUMFRAMES = len(feat)
+    denominator = 2 * sum([i**2 for i in range(1, N+1)])
+    delta_feat = np.empty_like(feat)
+    # padded version of feat
+    padded = np.pad(feat, ((N, N), (0, 0)), mode='edge')
+    for t in range(NUMFRAMES):
+        # [t : t+2*N+1] == [(N+t)-N : (N+t)+N+1]
+        delta_feat[t] = np.dot(np.arange(-N, N+1), padded[t : t+2*N+1]) / denominator
+    return delta_feat
+
+
 def extract_feature(x, y, filepath='feature/MFCC.pkl'):
     start_time = get_time()
     print("Extract MFCC feature...")
     flag = False
     feature_mfcc_x = None
     feature_mfcc_y = None
-    # sorry, I don't use tqdm to visualize this process.
-    # because there is something wrong when I use both tqdm and zip.
-    for _x,_y in zip(x,y):
+    for i in tqdm(range(len(x))):
         # extract mfcc feature based on psf, you can look more detail on psf's website.
-        _feature = psf.mfcc(_x)
+        # TODO plp feature
+        # mfcc feature, we will add plp later
+        _feature = psf.mfcc(x[i])
+        mfcc_delta = delta(_feature)
+        _feature = np.hstack((_feature, mfcc_delta))
 
+        # print(mfcc_delta.shape)
         # normalize feature based on preprocessing scale
         _feature = preprocessing.scale(_feature)
         label = np.zeros((_feature.shape[0], 1))
         # _y is speaker id, like id10270, transform it to 10270
-        label[:,0] = int(_y[2:])
+        label[:,0] = int(y[i][2:])
 
         if flag:
             feature_mfcc_x = np.vstack((feature_mfcc_x, _feature))
@@ -97,7 +117,7 @@ def load_extract(file=False):
     return mfcc_x,mfcc_y
 
 
-def GMM(x, y, test_size=0.3, n_components=256, model=False):
+def GMM(x, y, test_size=0.3, n_components=16, model=False):
     print("Train GMM model !")
     # split x,y to train and test
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=0)
