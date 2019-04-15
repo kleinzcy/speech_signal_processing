@@ -9,13 +9,17 @@ import os
 from utils.tools import read, get_time
 from tqdm import tqdm
 
-from utils.processing import MFCC
+# from utils.processing import MFCC
 import python_speech_features as psf
 import numpy as np
 import pickle as pkl
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+
+
+label_encoder = {}
+
 
 def load_data(path='dataset/ASR_GMM'):
     """
@@ -24,20 +28,24 @@ def load_data(path='dataset/ASR_GMM'):
     :return: x  type:list,each element is an audio, y type:list,it is the label of x
     """
     start_time = get_time()
-    print("Load data...")
+    print("Loading data...")
     speaker_list = os.listdir(path)
     y = []
     x = []
+    num = 0
     for speaker in tqdm(speaker_list):
+        # encoder the speaker to num
+        label_encoder[speaker] = num
         path1 = os.path.join(path, speaker)
         for _dir in os.listdir(path1):
             path2 = os.path.join(path1, _dir)
             for _wav in os.listdir(path2):
                 samplerate, audio = read(os.path.join(path2, _wav))
-                # speaker is id10270,id10271 etc.
-                y.append(speaker)
+                y.append(num)
                 # sample rate is 16000, you can down sample it to 8000, but the result will be bad.
                 x.append(audio)
+
+        num += 1
     print("Complete! Spend {:.2f}s".format(get_time(start_time)))
     return x,y
 
@@ -61,69 +69,73 @@ def delta(feat, N=2):
     return delta_feat
 
 
-def extract_feature(x, y, filepath='feature/MFCC.pkl'):
+def extract_feature(x, y, is_train=False, feature_type='MFCC'):
+    """
+    extract feature from x
+    :param x: type list, each element is audio
+    :param y: type list, each element is label of audio in x
+    :param filepath: the path to save feature
+    :param is_train: if true, generate train_data(type dict, key is lable, value is feature),
+                     if false, just extract feature from x
+    :return:
+    """
     start_time = get_time()
-    print("Extract MFCC feature...")
-    flag = False
-    feature_mfcc_x = None
-    feature_mfcc_y = None
+    print("Extract {} feature...".format(feature_type))
+    feature = []
+    train_data = {}
     for i in tqdm(range(len(x))):
         # extract mfcc feature based on psf, you can look more detail on psf's website.
         # TODO plp feature
         # mfcc feature, we will add plp later
-        _feature = psf.mfcc(x[i])
-        mfcc_delta = delta(_feature)
-        _feature = np.hstack((_feature, mfcc_delta))
+        if feature_type=='MFCC':
+            _feature = psf.mfcc(x[i])
+            mfcc_delta = delta(_feature)
+            _feature = np.hstack((_feature, mfcc_delta))
 
-        # print(mfcc_delta.shape)
-        # normalize feature based on preprocessing scale
-        _feature = preprocessing.scale(_feature)
-        label = np.zeros((_feature.shape[0], 1))
-        # _y is speaker id, like id10270, transform it to 10270
-        label[:,0] = int(y[i][2:])
-
-        if flag:
-            feature_mfcc_x = np.vstack((feature_mfcc_x, _feature))
-            feature_mfcc_y = np.vstack((feature_mfcc_y, label))
+            _feature = preprocessing.scale(_feature)
         else:
-            feature_mfcc_x = _feature
-            feature_mfcc_y = label
-            flag = True
+            # feature_type=='PLP'
+            _feature = None
+            pass
 
-    # save feature in filepath
-    with open(filepath, 'wb') as f:
-        pkl.dump(np.hstack((feature_mfcc_x, feature_mfcc_y)), f)
+        # append _feature to feature
+        feature.append(_feature)
+
+        if is_train:
+            if y[i] in train_data:
+                train_data[y[i]] = np.vstack((train_data[y[i]], _feature))
+            else:
+                train_data[y[i]] = _feature
 
     print("Complete! Spend {:.2f}s".format(get_time(start_time)))
 
-    return feature_mfcc_x, feature_mfcc_y.reshape(-1,)
 
-
-def load_extract(file=False):
-    # combination load_data and extract_feature
-    if file:
-        start_time = get_time()
-        print("Load MFCC feature from file...")
-        with open('feature/MFCC.pkl', 'rb') as f:
-            train = pkl.load(f)
-            mfcc_x = train[:, :-1]
-            mfcc_y = train[:, -1]
-            del train
-        print("spend {:.2f}s".format(get_time(start_time)))
+    if is_train:
+        return train_data, feature, y
     else:
-        x, y = load_data()
-        mfcc_x, mfcc_y = extract_feature(x=x, y=y)
-
-    return mfcc_x,mfcc_y
+        return feature, y
 
 
-def GMM(x, y, test_size=0.3, n_components=16, model=False):
-    print("Train GMM model !")
-    # split x,y to train and test
+def load_extract(test_size=0.3):
+    # combination load_data and extract_feature
+    x, y = load_data()
+    # train test split
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=0)
+    # extract feature from train
+    train_data, x_train, y_train = extract_feature(x=x_train, y=y_train, is_train=True)
+    # extract feature from test
+    x_test, y_test = extract_feature(x=x_test,y=y_test)
+
+    return train_data, x_train, y_train, x_test, y_test
+
+
+def GMM(train, x_train, y_train, x_test, y_test, n_components=16, model=False):
+    print("Train GMM-UBM model !")
+    # split x,y to train and test
     start_time = get_time()
     # if model is True, it will load model from Model/GMM_MFCC_model.pkl.
     # if False,it will train and save model
+
     if model:
         print("load model from file...")
         with open("Model/GMM_MFCC_model.pkl", 'rb') as f:
@@ -131,20 +143,30 @@ def GMM(x, y, test_size=0.3, n_components=16, model=False):
         with open("Model/UBM_MFCC_model.pkl", 'rb') as f:
             UBM = pkl.load(f)
     else:
-        speaker_list = os.listdir('dataset/ASR_GMM')
+        # speaker_list = os.listdir('dataset/ASR_GMM')
         GMM = []
-        UBM = []
-        for speaker in tqdm(speaker_list):
-            speaker = int(speaker[2:])
+        ubm_train = None
+        flag = False
+        # UBM = []
+        print("Train GMM!")
+        for speaker in tqdm(label_encoder.values()):
+            # print(type(speaker))
+            # speaker = label_encoder[speaker]
             # GMM based on speaker
-            gmm = GaussianMixture(n_components = n_components, max_iter = 200, covariance_type='diag',n_init = 3)
-            gmm.fit(x_train[y_train==speaker])
+            gmm = GaussianMixture(n_components = n_components, covariance_type='diag')
+            gmm.fit(train[speaker])
             GMM.append(gmm)
+            if flag:
+                ubm_train = np.vstack((ubm_train, train[speaker]))
+            else:
+                ubm_train = train[speaker]
+                flag = True
 
-            # UBM based on background
-            gmm = GaussianMixture(n_components = n_components, max_iter = 200, covariance_type='diag',n_init = 3)
-            gmm.fit(x_train[y_train!=speaker])
-            UBM.append(gmm)
+        # UBM based on background
+        print("Train UBM!")
+        UBM = GaussianMixture(n_components = n_components, covariance_type='diag')
+        UBM.fit(ubm_train)
+        # UBM.append(gmm)
 
         with open("Model/GMM_MFCC_model.pkl", 'wb') as f:
             pkl.dump(GMM, f)
@@ -152,24 +174,30 @@ def GMM(x, y, test_size=0.3, n_components=16, model=False):
             pkl.dump(UBM, f)
 
     # train accuracy
-    valid = np.zeros((x_train.shape[0], len(GMM)))
+    valid = np.zeros((len(x_train), len(GMM)))
     for i in range(len(GMM)):
-        valid[:, i] = GMM[i].score_samples(x_train) - UBM[i].score_samples(x_train)
+        for j in range(len(x_train)):
+            valid[j, i] = GMM[i].score(x_train[j]) - UBM.score(x_train[j])
 
-    valid = valid.argmax(axis=1)+10270
-    acc_train = (valid==y_train).sum()/y_train.shape[0]
+    valid = valid.argmax(axis=1)
+    acc_train = (valid==np.array(y_train)).sum()/len(x_train)
 
     # test accuracy
-    pred = np.zeros((x_test.shape[0], len(GMM)))
+    pred = np.zeros((len(x_test), len(GMM)))
     for i in range(len(GMM)):
-        pred[:, i] = GMM[i].score_samples(x_test) - UBM[i].score_samples(x_test)
+        for j in range(len(x_test)):
+            pred[j, i] = GMM[i].score(x_test[j]) - UBM.score(x_test[j])
 
-    pred = pred.argmax(axis=1)+10270
-    acc = (pred==y_test).sum()/y_test.shape[0]
+    pred = pred.argmax(axis=1)
+    acc = (pred==np.array(y_test)).sum()/len(x_test)
 
     print("spend {:.2f}s, train acc {:.2%}, test acc {:.2%}".format(get_time(start_time), acc_train,acc))
 
 
+def main():
+    train_data, mfcc_x_train, mfcc_y_train, mfcc_x_test, mfcc_y_test = load_extract()
+    GMM(train_data, mfcc_x_train, mfcc_y_train, mfcc_x_test, mfcc_y_test, model=False)
+
+
 if __name__=='__main__':
-    mfcc_x, mfcc_y = load_extract(file=False)
-    GMM(mfcc_x, mfcc_y, model=False)
+    main()
