@@ -105,18 +105,21 @@ class Ui_Form(object):
             prob[0,i] = self.GMM[i].score(self.feature) - self.UBM.score(self.feature)
 
         res = prob.argmax(axis=1)
-        output = str(res[0]) + ':' + str(prob[0,res[0]])
-        self.textBrowser.append(output)
 
         num2name = ['班富景', '郭佳怡', '黄心羿', '居慧敏', '廖楚楚', '刘山', '任蕴菡', '阮煜文', '苏林林', '万之颖',
                 '陈斌', '陈泓宇', '陈军栋', '蔡晓明', '邓刚刚', '董俊虎', '代旭辉', '高威', '龚兵庆', '姜宇伦',
                 '靳子涵', '李恩', '罗远哲', '罗伟宇', '李想', '李晓波', '李彦能', '刘乙灼', '刘志航', '李忠亚']
+
+        prob = np.exp(prob)/np.exp(prob).sum(axis=1)
+        # print(prob)
+        output = str(num2name[res[0]]) + ':' + str(prob[0,res[0]])
+        self.textBrowser.append(output)
         APP_ID = '11719204'
         API_KEY = 'g7SpqGrkSKgTEBti3pfDsprD'
         SECRET_KEY = 'Tn5CS7EE26rDH34H8z7GV3p0DYYpsksZ'
 
         client = AipSpeech(APP_ID, API_KEY, SECRET_KEY)
-        result = client.synthesis('你好{}'.format(num2name[res[0]]), 'zh', 0, {
+        result = client.synthesis('{:.2%}的可能是{}'.format(prob[0,res[0]],num2name[res[0]]), 'zh', 0, {
             'vol': 5,
         })
         if not isinstance(result, dict):
