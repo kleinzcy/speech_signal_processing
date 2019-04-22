@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2019/4/12 22:24
 # @Author  : chuyu zhang
-# @File    : GMM-UBM.py
+# @File    : GMM_UBM.py
 # @Software: PyCharm
 
 import os
@@ -17,7 +17,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 
-
+from sidekit.frontend.features import plp,mfcc
 label_encoder = {}
 
 
@@ -88,15 +88,19 @@ def extract_feature(x, y, is_train=False, feature_type='MFCC'):
         # TODO plp feature
         # mfcc feature, we will add plp later
         if feature_type=='MFCC':
-            _feature = psf.mfcc(x[i])
+            _feature = mfcc(x[i])
+            mfcc_delta = delta(_feature)
+            _feature = np.hstack((_feature, mfcc_delta))
+
+            _feature = preprocessing.scale(_feature)
+        elif feature_type=='PLP':
+            _feature = plp(x[i])
             mfcc_delta = delta(_feature)
             _feature = np.hstack((_feature, mfcc_delta))
 
             _feature = preprocessing.scale(_feature)
         else:
-            # feature_type=='PLP'
-            _feature = None
-            pass
+            raise NameError
 
         # append _feature to feature
         feature.append(_feature)
@@ -167,6 +171,9 @@ def GMM(train, x_train, y_train, x_test, y_test, n_components=16, model=False):
         UBM = GaussianMixture(n_components = n_components, covariance_type='diag')
         UBM.fit(ubm_train)
         # UBM.append(gmm)
+
+        if not os.path.exists('Model'):
+            os.mkdir("Model")
 
         with open("Model/GMM_MFCC_model.pkl", 'wb') as f:
             pkl.dump(GMM, f)

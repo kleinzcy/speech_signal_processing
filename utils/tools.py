@@ -78,11 +78,11 @@ def record(filename="test.wav",seconds=10,
     print("{} seconds record has completed.".format(seconds))
 
 
-def play(audio=None, sampling_freq=None, filename=None, chunk=1024):
+def play(audio=None, sampling_freq=8000, filename=None, chunk=1024):
     start_time = get_time()
     if filename==None:
         # pass
-        play_obj = sa.play_buffer(audio, audio.shape[1], 2, sampling_freq)
+        play_obj = sa.play_buffer(audio, 1, 2, sampling_freq)
         play_obj.wait_done()
 
     else:
