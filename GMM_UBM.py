@@ -85,8 +85,6 @@ def extract_feature(x, y, is_train=False, feature_type='MFCC'):
     train_data = {}
     for i in tqdm(range(len(x))):
         # extract mfcc feature based on psf, you can look more detail on psf's website.
-        # TODO plp feature
-        # mfcc feature, we will add plp later
         if feature_type=='MFCC':
             _feature = mfcc(x[i])
             mfcc_delta = delta(_feature)
