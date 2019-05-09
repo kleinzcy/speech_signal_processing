@@ -2,36 +2,35 @@
 # -*- coding: UTF-8 -*-
 # @Time     : 2018/9/13 12:59
 # @Author   : klein
-# @File     : stock_pre.py
+# @File     : lstm.py
 # @Software : PyCharm
-import numpy as np
-import tensorflow as tf
-import warnings
-from sklearn.model_selection import train_test_split
-from sklearn import preprocessing
-import pandas as pd
-import time
-from sidekit.frontend.features import plp,mfcc
+
 import os
+import pickle as pkl
 from utils.tools import read, get_time
 from tqdm import tqdm
+import numpy as np
+import tensorflow as tf
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+import time
+from sidekit.frontend.features import plp,mfcc
+
+import warnings
 warnings.filterwarnings("ignore")
 
 
-param = {'epoch': 100, 'lr': 0.001, 'num_feature': 28, 'pre_step': 15,
-         'num_units': 32, 'batch_size': 100, 'time_step': 28, 'num_output': 10}
-
 label_encoder = {}
-
 
 class LSTM:
     """
     many to one model.
     """
-    def __init__(self):
+    def __init__(self, param, path='dataset/ASR_GMM_big'):
         self.lr = param['lr']
         self.bz = param['batch_size']
         self.time_step = param['time_step']
+        self.path = path
 
     def inference(self, x):
         """
@@ -165,24 +164,14 @@ class LSTM:
     def close(self):
         self.sess.close()
 
-    @staticmethod
-    def weight_variable(shape):
-        initial = tf.truncated_normal(shape, stddev=0.1)
-        return tf.Variable(initial)
-
-    @staticmethod
-    def bias_variable(shape):
-        initial = tf.constant(0.1, shape=shape)
-        return tf.Variable(initial)
-
-    @staticmethod
-    def load_data(path='dataset/ASR_GMM'):
+    def load_data(self):
         """
         load audio file.
         :param path: the dir to audio file
         :return: x  type:list,each element is an audio, y type:list,it is the label of x
         """
         start_time = get_time()
+        path = self.path
         print("Loading data...")
         speaker_list = os.listdir(path)
         y = []
@@ -223,7 +212,7 @@ class LSTM:
             delta_feat[t] = np.dot(np.arange(-N, N + 1), padded[t: t + 2 * N + 1]) / denominator
         return delta_feat
 
-    def extract_feature(self, x, y, is_train=False, feature_type='MFCC'):
+    def extract_feature(self, feature_type='MFCC'):
         """
         extract feature from x
         :param x: type list, each element is audio
@@ -235,43 +224,72 @@ class LSTM:
         """
         # TODO 以秒为单位提取特征。
         start_time = get_time()
-        print("Extract {} feature...".format(feature_type))
-        feature = []
-        train_data = {}
-        for i in tqdm(range(len(x))):
-            # extract mfcc feature based on psf, you can look more detail on psf's website.
-            if feature_type == 'MFCC':
-                _feature = mfcc(x[i])
-                mfcc_delta = self.delta(_feature)
-                _feature = np.hstack((_feature, mfcc_delta))
+        if not os.path.exists('feature'):
+            os.mkdir('feature')
 
-                _feature = preprocessing.scale(_feature)
-            elif feature_type == 'PLP':
-                _feature = plp(x[i])
-                mfcc_delta = self.delta(_feature)
-                _feature = np.hstack((_feature, mfcc_delta))
-
-                _feature = preprocessing.scale(_feature)
-            else:
-                raise NameError
-
-            # append _feature to feature
-            feature.append(_feature)
-
-            if is_train:
-                if y[i] in train_data:
-                    train_data[y[i]] = np.vstack((train_data[y[i]], _feature))
+        if not os.path.exists('feature/{}_feature.pkl'.format(feature_type)):
+            x, y = self.load_data()
+            print("Extract {} feature...".format(feature_type))
+            feature = []
+            label = []
+            for i in tqdm(range(len(x))):
+                # 这里MFCC和PLP默认是16000Hz，注意修改
+                # mfcc 25ms窗长，10ms重叠
+                if feature_type == 'MFCC':
+                    _feature = mfcc(x[i])[0]
+                elif feature_type == 'PLP':
+                    _feature = plp(x[i])[0]
                 else:
-                    train_data[y[i]] = _feature
+                    raise NameError
+
+                # _feature = self.delta(_feature)
+                # TODO 兼容i-vector 和 d-vector
+                _feature = preprocessing.scale(_feature)
+                for j in range(_feature.shape[0]//40):
+                    feature.append(_feature[j*40:j*40+40])
+                    label.append(y[i])
+            print(len(feature), feature[0].shape)
+            self.save(feature, '{}_feature'.format(feature_type))
+            self.save(label, '{}_label'.format(feature_type))
+
+        else:
+            feature = self.load('{}_feature'.format(feature_type))
+            label = self.load('{}_label'.format(feature_type))
 
         print("Complete! Spend {:.2f}s".format(get_time(start_time)))
+        return feature, label
 
-        if is_train:
-            return train_data, feature, y
-        else:
-            return feature, y
+    @staticmethod
+    def weight_variable(shape):
+        initial = tf.truncated_normal(shape, stddev=0.1)
+        return tf.Variable(initial)
+
+    @staticmethod
+    def bias_variable(shape):
+        initial = tf.constant(0.1, shape=shape)
+        return tf.Variable(initial)
+
+    @staticmethod
+    def save(data, file_name):
+        with open('feature/{}.pkl'.format(file_name), 'wb') as f:
+            pkl.dump(data, f)
+
+    @staticmethod
+    def load(file_name):
+        with open('feature/{}.pkl'.format(file_name), 'rb') as f:
+            return pkl.load(f)
 
 
 if __name__ == '__main__':
-    pass
+    param = {'epoch': 100, 'lr': 0.001, 'num_feature': 13, 'pre_step': 15,
+             'num_units': 32, 'batch_size': 100, 'time_step': 40, 'num_output': 10}
+    model = LSTM(param=param)
+    feature, label = model.extract_feature()
+    feature = np.array(feature)
+    label = np.array(label).reshape(-1, 1)
+    enc = preprocessing.OneHotEncoder()
+    label = enc.fit_transform(label)
+    X_train, X_test, y_train, y_test = train_test_split(feature, label, shuffle=True, test_size=0.3)
+    print(len(X_train), X_train[0].shape)
+    model.train(X_train, y_train, X_test, y_test)
 
