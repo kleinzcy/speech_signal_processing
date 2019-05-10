@@ -15,7 +15,7 @@ from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 import time
 from sidekit.frontend.features import plp,mfcc
-
+from sidekit.frontend import vad
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -69,7 +69,7 @@ class LSTM:
         y = tf.placeholder(tf.float32, shape=[None, param['num_output']])
 
         # 衰减率
-        decay_rate = 0.995
+        decay_rate = 0.99
         # 衰减次数
         decay_steps = 10
         # define
@@ -97,16 +97,19 @@ class LSTM:
         sess.run(init)
 
         batch_size = param['batch_size']
+        # TODO 为什么训练结果不变
         for epoch in range(1,param['epoch']+1):
             sess.run(lr, feed_dict={global_: epoch})
 
             # train
             start = time.time()
+            acc = []
             for j in range(x_train.shape[0]//batch_size):
-                sess.run(optimizer, feed_dict={x: x_train[j*batch_size:(j+1)*batch_size],
+                _, _acc = sess.run([optimizer,accuracy], feed_dict={x: x_train[j*batch_size:(j+1)*batch_size],
                                               y: y_train[j*batch_size:(j+1)*batch_size]})
+                acc.append(_acc)
             end = time.time() - start
-            print("epoch:{}, time:{}".format(epoch, end))
+            print("epoch:{}, time:{:.2f}s, acc:{:.2%}".format(epoch, end, sum(acc) / len(acc)))
 
             # eval
             if epoch % 10 == 0:
@@ -123,7 +126,7 @@ class LSTM:
                     )
                     train_accuracyes.append(train_accuracy)
                 end = time.time() - start
-                print("epoch:{}, average training accuracy:{:.3%}, time:{}".
+                print("epoch:{}, average training accuracy:{:.3%}, time:{:.2f}s".
                       format(epoch, sum(train_accuracyes) / len(train_accuracyes), end))
 
                 # eval test
@@ -139,7 +142,7 @@ class LSTM:
                     )
                     test_accuracyes.append(test_accuracy)
                 end = time.time() - start
-                print("epoch:{}, average training accuracy:{:.3%}, time:{}".
+                print("epoch:{}, average test accuracy:{:.3%}, time:{:.2f}s".
                       format(epoch, sum(test_accuracyes) / len(test_accuracyes), end))
 
             self.sess = sess
@@ -244,9 +247,10 @@ class LSTM:
 
                 # _feature = self.delta(_feature)
                 # TODO 兼容i-vector 和 d-vector
-                _feature = preprocessing.scale(_feature)
-                for j in range(_feature.shape[0]//40):
-                    feature.append(_feature[j*40:j*40+40])
+                # _feature = preprocessing.scale(_feature)
+                num = 100
+                for j in range(_feature.shape[0]//num):
+                    feature.append(_feature[j*num:(j+1)*num])
                     label.append(y[i])
             print(len(feature), feature[0].shape)
             self.save(feature, '{}_feature'.format(feature_type))
@@ -281,14 +285,15 @@ class LSTM:
 
 
 if __name__ == '__main__':
-    param = {'epoch': 100, 'lr': 0.001, 'num_feature': 13, 'pre_step': 15,
-             'num_units': 32, 'batch_size': 100, 'time_step': 40, 'num_output': 10}
+    param = {'epoch': 100, 'lr': 1e-1, 'num_feature': 13, 'pre_step': 15,
+             'num_units': 16, 'batch_size': 50, 'time_step': 100, 'num_output': 10}
     model = LSTM(param=param)
     feature, label = model.extract_feature()
     feature = np.array(feature)
     label = np.array(label).reshape(-1, 1)
     enc = preprocessing.OneHotEncoder()
-    label = enc.fit_transform(label)
+    # 这里如果不toarray的话，得到的是一个csr矩阵
+    label = enc.fit_transform(label).toarray()
     X_train, X_test, y_train, y_test = train_test_split(feature, label, shuffle=True, test_size=0.3)
     print(len(X_train), X_train[0].shape)
     model.train(X_train, y_train, X_test, y_test)

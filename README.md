@@ -2,7 +2,7 @@
 
 ## Requirement
 ```
-pip install dtw librosa fastdtw tqdm
+pip install dtw librosa fastdtw tqdm webrtcvad sidekit tensorflow
 ```
 
 ## dataset
