@@ -2,8 +2,10 @@
 
 ## Requirement
 ```
-pip install dtw librosa fastdtw tqdm webrtcvad sidekit tensorflow
+pip install dtw librosa fastdtw tqdm webrtcvad sidekit tensorflow keras
 ```
+
+*NOTE*:可以使用镜像来加快下载速度，参考[blog](https://www.cnblogs.com/microman/p/6107879.html)
 
 ## dataset
 download dataset from [here](https://pan.baidu.com/s/16b3SN2WLULsPAABx9Ct0Y), code is v661.
