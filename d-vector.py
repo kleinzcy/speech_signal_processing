@@ -13,6 +13,8 @@ from utils.tools import read, get_time
 from tqdm import tqdm
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
+from scipy.spatial.distance import cosine
+
 from sidekit.frontend.features import plp,mfcc
 
 from keras.layers import Dense, Activation, Dropout, Input
@@ -48,7 +50,7 @@ class Data_gen:
             for _dir in os.listdir(path1):
                 path2 = os.path.join(path1, _dir)
                 for _wav in os.listdir(path2):
-                    samplerate, audio = read(os.path.join(path2, _wav))
+                    self.sample_rate, audio = read(os.path.join(path2, _wav))
                     y.append(num)
                     # sample rate is 16000, you can down sample it to 8000, but the result will be bad.
                     x.append(audio)
@@ -57,7 +59,7 @@ class Data_gen:
         print("Complete! Spend {:.2f}s".format(get_time(start_time)))
         return x, y
 
-    def extract_feature(self, sample_rate=16000, feature_type='MFCC'):
+    def extract_feature(self, feature_type='MFCC'):
         """
         extract feature from x
         :param x: type list, each element is audio
@@ -76,13 +78,22 @@ class Data_gen:
             print("Extract {} feature...".format(feature_type))
             feature = []
             label = []
+            new_x = []
+            new_y = []
+            for i in range(len(x)):
+                for j in range(x[i].shape[0]//self.sample_rate):
+                    new_x.append(x[i][j*self.sample_rate:(j+1)*self.sample_rate])
+                    new_y.append(y[i])
+
+            x = new_x
+            y = new_y
             for i in tqdm(range(len(x))):
                 # 这里MFCC和PLP默认是16000Hz，注意修改
                 # mfcc 25ms窗长，10ms重叠
                 if feature_type == 'MFCC':
-                    _feature = mfcc(x[i], fs=sample_rate)[0]
+                    _feature = mfcc(x[i], fs=self.sample_rate)[0]
                 elif feature_type == 'PLP':
-                    _feature = plp(x[i], fs=sample_rate)[0]
+                    _feature = plp(x[i], fs=self.sample_rate)[0]
                 else:
                     raise NameError
                 # 特征出了问题，需要特殊处理才行
@@ -92,10 +103,15 @@ class Data_gen:
                 # _feature = preprocessing.scale(_feature)
                 # _feature = preprocessing.StandardScaler().fit_transform(_feature)
                 # 每2*num为一个输入，并且重叠num
+                """
                 num = 20
                 for j in range(_feature.shape[0]//num-1):
                     feature.append(_feature[j*num:j*num+2*num])
                     label.append(y[i])
+                """
+                feature.append(_feature)
+                label.append(y[i])
+
             print(len(feature), feature[0].shape)
             self.save(feature, '{}_feature'.format(feature_type))
             self.save(label, '{}_label'.format(feature_type))
@@ -141,59 +157,69 @@ class nn_model:
     def __init__(self, n_class=10):
         self.n_class = n_class
 
-    def model(self, X_train, Y_train, X_val, Y_val):
+    def model(self, X_train, Y_train, X_val, Y_val, train=False):
         #需要修改input_shape等一些参数
-        print("Training model")
-        model = Sequential()
+        if train or not os.path.exists('feature/d_vector/d_vector_nn.h5'):
+            print("Training model")
+            model = Sequential()
 
-        model.add(Dense(256, input_shape=(X_train.shape[1],), name="dense1",
-                        kernel_regularizer=regularizers.l2(0.01),activity_regularizer=regularizers.l1(0.01)))
-        model.add(Activation('relu', name="activation1"))
-        model.add(Dropout(0.5, name="drop1"))
+            model.add(Dense(256, input_shape=(X_train.shape[1],), name="dense1"))
+            model.add(Activation('relu', name="activation1"))
+            model.add(Dropout(rate=0.2, name="drop1"))
 
-        model.add(Dense(256, name="dense2",
-                        kernel_regularizer=regularizers.l2(0.01),activity_regularizer=regularizers.l1(0.01)))
-        model.add(Activation('relu', name="activation2"))
-        model.add(Dropout(0.5, name="drop2"))
+            model.add(Dense(256, name="dense2"))
+            model.add(Activation('relu', name="activation2"))
+            model.add(Dropout(rate=0.2, name="drop2"))
 
-        model.add(Dense(256, name="dense3"))
+            model.add(Dense(256, name="dense3"))
 
-        modelInput = Input(shape=(X_train.shape[1],))
-        features = model(modelInput)
-        spkModel = Model(inputs=modelInput, outputs=features)
+            modelInput = Input(shape=(X_train.shape[1],))
+            features = model(modelInput)
+            spkModel = Model(inputs=modelInput, outputs=features)
 
-        model1 = Activation('relu')(features)
-        model1 = Dropout(0.5)(model1)
-        model1 = Dense(self.n_class, activation='softmax')(model1)
+            model1 = Activation('relu')(features)
+            model1 = Dropout(rate=0.5)(model1)
+            model1 = Dense(self.n_class, activation='softmax')(model1)
 
-        spk = Model(inputs=modelInput, outputs=model1)
+            spk = Model(inputs=modelInput, outputs=model1)
 
+            sgd = Adam(lr=1e-4)
+            # early_stopping = EarlyStopping(monitor='val_loss', patience=4)
+            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-7)
+            csv_logger = CSVLogger('feature/d_vector/nn_training.log')
 
-        sgd = Adam(lr=1e-4)
-        early_stopping = EarlyStopping(monitor='val_loss', patience=4)
-        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, min_lr=1e-7)
-        csv_logger = CSVLogger('feature/d_vector/nn_training.log')
+            spk.compile(loss='categorical_crossentropy',optimizer=sgd, metrics=['accuracy'])
 
-        spk.compile(loss='categorical_crossentropy',optimizer=sgd, metrics=['accuracy'])
+            spk.fit(X_train, Y_train, batch_size = 128, epochs=50, validation_data = (X_val, Y_val),
+                                callbacks=[reduce_lr, csv_logger])
 
-        spk.fit(X_train, Y_train, batch_size = 128, epochs=2, validation_data = (X_val, Y_val),
-                            callbacks=[early_stopping, reduce_lr, csv_logger])
-
-        if not os.path.exists('feature/d_vector'):
-            os.mkdir('feature/d_vector')
-        # spk.save('spk.h5')
-        spkModel.save('feature/d_vector/d_vector_nn.h5')
+            if not os.path.exists('feature/d_vector'):
+                os.mkdir('feature/d_vector')
+            # spk.save('spk.h5')
+            spkModel.save('feature/d_vector/d_vector_nn.h5')
+        else:
+            spkModel = load_model('feature/d_vector/d_vector_nn.h5')
 
         X_train = spkModel.predict(X_train)
         X_val = spkModel.predict(X_val)
         self.data = [X_train, Y_train, X_val, Y_val]
 
     def test(self):
-        # model = load_model('feature/d_vector/d_vector_nn.h5')
+        #
         X_train, Y_train, X_val, Y_val = self.data
-        # feature = model.predict(X_train)
 
-        return feature
+        # feature = model.predict(X_train)
+        avg = np.zeros((self.n_class, X_train.shape[1]))
+        for i in range(Y_train.shape[1]):
+            avg[i,:] = X_train[np.argmax(Y_train, axis=1)==i].mean(axis=0)
+
+        distance = np.zeros((X_val.shape[0], self.n_class))
+        for i in range(X_val.shape[0]):
+            for j in range(self.n_class):
+                distance[i, j] = cosine(X_val[i], avg[j])
+
+        acc = (np.argmax(Y_val, axis=1)==np.argmin(distance, axis=1)).sum()/X_val.shape[0]
+        return acc
 
 
 if __name__=="__main__":
@@ -206,7 +232,8 @@ if __name__=="__main__":
     enc = preprocessing.OneHotEncoder()
     label = enc.fit_transform(label).toarray()
 
-    X_train, X_val, y_train, y_val = train_test_split(feature, label, shuffle=True, test_size=0.3)
+    X_train, X_val, y_train, y_val = train_test_split(feature, label, shuffle=True, test_size=0.3, random_state=2019)
     model = nn_model()
-    model.model(X_train, y_train, X_val, y_val)
-    model.test()
+    model.model(X_train, y_train, X_val, y_val, train=True)
+    acc = model.test()
+    print(acc)
