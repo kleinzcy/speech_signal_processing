@@ -98,7 +98,6 @@ class LSTM:
         sess.run(init)
 
         batch_size = param['batch_size']
-        # TODO 为什么训练结果不变
         for epoch in range(1,param['epoch']+1):
             # sess.run(lr, feed_dict={global_: epoch})
 
