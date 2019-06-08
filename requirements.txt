@@ -1,0 +1,11 @@
+dtw
+fastdtw
+tqdm
+librosa
+sidekit
+tensorflow
+keras
+numpy
+scipy
+pyqt5
+sklearn

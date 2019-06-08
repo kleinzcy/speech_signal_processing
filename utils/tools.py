@@ -60,7 +60,7 @@ def save_wave_file(filename, data, channels=1, sampwidth=2, framerate=8000):
 
 # num_samples这个参数的意义？？
 def record(filename="test.wav",seconds=10,
-           framerate=8000, format=paInt16, channels=1, num_samples=2000):
+           framerate=16000, format=paInt16, channels=1, num_samples=2000):
     p=PyAudio()
     stream=p.open(format = format, channels=channels, rate=framerate,
                   input=True, frames_per_buffer=num_samples)

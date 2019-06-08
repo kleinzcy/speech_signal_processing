@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2019/5/15 22:56
 # @Author  : chuyu zhang
-# @File    : d-vector.py
+# @File    : d_vector.py
 # @Software: PyCharm
 
 import os
@@ -13,21 +13,19 @@ from tqdm import tqdm
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 from scipy.spatial.distance import cosine
+from keras.models import Model,Sequential,load_model
 
 from sidekit.frontend.features import plp,mfcc
 
-from keras.layers import Dense, Activation, Dropout, Input, GRU, Flatten
+from keras.layers import Dense, Activation, Dropout, Input, GRU, LSTM, Flatten,Convolution2D, MaxPooling2D,Convolution1D
 from keras.optimizers import Adam
-from keras.models import Model,Sequential,load_model
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint,CSVLogger
 from keras import regularizers
 from keras.layers.core import Reshape,Masking,Lambda,Permute
 import keras.backend as K
-from keras.layers import Convolution2D, MaxPooling2D,Convolution1D
 from keras.layers.wrappers import TimeDistributed
 import keras
 
-# TODO VAD
 class Data_gen:
     # 生成数据
     def __init__(self):
@@ -58,7 +56,7 @@ class Data_gen:
         print("Complete! Spend {:.2f}s".format(get_time(start_time)))
         return x, y
 
-    def extract_feature(self, feature_type='MFCC'):
+    def extract_feature(self, feature_type='MFCC', datatype='dev'):
         """
         extract feature from x
         :param x: type list, each element is audio
@@ -72,7 +70,7 @@ class Data_gen:
         if not os.path.exists('feature'):
             os.mkdir('feature')
 
-        if not os.path.exists('feature/{}_feature.pkl'.format(feature_type)):
+        if not os.path.exists('feature/{}_{}_feature.pkl'.format(datatype, feature_type)):
             x, y = self._load()
             print("Extract {} feature...".format(feature_type))
             feature = []
@@ -102,29 +100,23 @@ class Data_gen:
                 # _feature = preprocessing.scale(_feature)
                 # _feature = preprocessing.StandardScaler().fit_transform(_feature)
                 # 每2*num为一个输入，并且重叠num
-                """
-                num = 20
-                for j in range(_feature.shape[0]//num-1):
-                    feature.append(_feature[j*num:j*num+2*num])
-                    label.append(y[i])
-                """
                 feature.append(_feature)
                 label.append(y[i])
 
             print(len(feature), feature[0].shape)
-            self.save(feature, '{}_feature'.format(feature_type))
-            self.save(label, '{}_label'.format(feature_type))
+            self.save(feature, '{}_{}_feature'.format(datatype, feature_type))
+            self.save(label, '{}_{}_label'.format(datatype, feature_type))
 
         else:
-            feature = self.load('{}_feature'.format(feature_type))
-            label = self.load('{}_label'.format(feature_type))
+            feature = self.load('{}_{}_feature'.format(datatype, feature_type))
+            label = self.load('{}_{}_label'.format(datatype, feature_type))
 
         print("Complete! Spend {:.2f}s".format(get_time(start_time)))
         return feature, label
 
-    def load_data(self, path='dataset/ASR_GMM_big', reshape=True):
+    def load_data(self, path='dataset/ASR_GMM_big', reshape=True, test_size=0.3,datatype='dev'):
         self.path = path
-        feature, label = data_gen.extract_feature()
+        feature, label = data_gen.extract_feature(datatype=datatype)
         feature = np.array(feature)
         # 由于是全连接,故需要reshape，如果是卷积或者rnn系列，就不需要reshape
         if reshape:
@@ -134,7 +126,7 @@ class Data_gen:
         self.enc = preprocessing.OneHotEncoder()
         label = self.enc.fit_transform(label).toarray()
 
-        X_train, X_val, y_train, y_val = train_test_split(feature, label, shuffle=True, test_size=0.3,
+        X_train, X_val, y_train, y_val = train_test_split(feature, label, shuffle=True, test_size=test_size,
                                                           random_state=2019)
         return X_train, X_val, y_train, y_val
 
@@ -170,7 +162,7 @@ class Data_gen:
 
 class nn_model:
     # TODO 用一个更大的数据集训练一个背景模型，然后利用这个背景模型直接得到新数据的d-vector
-    def __init__(self, n_class=10):
+    def __init__(self, n_class=40):
         self.n_class = n_class
 
     def inference(self, X_train, Y_train, X_val, Y_val):
@@ -219,7 +211,6 @@ class nn_model:
 
 
     def inference_gru(self, X_train, Y_train, X_val, Y_val):
-        # TODO 修改bug
         model = Sequential()
 
         model.add(Convolution2D(64, (5, 5),
@@ -262,7 +253,7 @@ class nn_model:
 
         spk = Model(inputs=modelInput, outputs=model1)
 
-        sgd = Adam(lr=1e-5)
+        sgd = Adam(lr=1e-4)
 
         spk.compile(loss='categorical_crossentropy',
                       optimizer=sgd, metrics=['accuracy'])
@@ -277,34 +268,124 @@ class nn_model:
             os.mkdir('feature/d_vector')
         spkModel.save('feature/d_vector/d_vector_gru.h5')
 
+    def inference_lstm(self, X_train, Y_train, X_val, Y_val):
+        model = Sequential()
 
-    def test(self, X_train, Y_train, X_val, Y_val):
-        spkModel = load_model('feature/d_vector/d_vector_nn.h5')
+        model.add(LSTM(128, input_shape=(X_train.shape[1],X_train.shape[2])))
+        modelInput = Input(shape=(X_train.shape[1],X_train.shape[2]))
+        features = model(modelInput)
+        spkModel = Model(inputs=modelInput, outputs=features)
+        model1 = Dense(self.n_class, activation='softmax',name="dense1")(features)
+        spk = Model(inputs=modelInput, outputs=model1)
+
+        sgd = Adam(lr=1e-4)
+
+        spk.compile(loss='categorical_crossentropy',
+                      optimizer=sgd, metrics=['accuracy'])
+
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, min_lr=1e-7)
+        csv_logger = CSVLogger('feature/d_vector/lstm_training.log')
+
+        spk.fit(X_train, Y_train, batch_size = 128, epochs=50, validation_data = (X_val, Y_val),
+                            callbacks=[reduce_lr, csv_logger])
+
+        if not os.path.exists('feature/d_vector'):
+            os.mkdir('feature/d_vector')
+        spkModel.save('feature/d_vector/d_vector_lstm.h5')
+
+    def test(self, X_train, Y_train, X_val, Y_val, model_name='nn'):
+        spkModel = load_model('feature/d_vector/d_vector_{}.h5'.format(model_name))
+        print(X_train.shape)
         X_train = spkModel.predict(X_train)
         X_val = spkModel.predict(X_val)
-        avg = np.zeros((self.n_class, X_train.shape[1]))
-        for i in range(Y_train.shape[1]):
+        # num为测试集中人数
+        num = Y_train.shape[1]
+        # 对同一个人的d-vector取平均，得到avg，作为这个人的模板储存起来。
+        with open('feature/d_vector/d_vector_lstm.pkl', 'wb') as f:
+            pkl.dump(X_train, f)
+
+        with open('feature/d_vector/d_vector_lstm_y.pkl', 'wb') as f:
+            pkl.dump(Y_train, f)
+
+        avg = np.zeros((num, X_train.shape[1]))
+        print(X_train.shape[1])
+        for i in range(num):
             avg[i,:] = X_train[np.argmax(Y_train, axis=1)==i].mean(axis=0)
 
-        distance = np.zeros((X_val.shape[0], self.n_class))
+        distance = np.zeros((X_val.shape[0], num))
         for i in range(X_val.shape[0]):
-            for j in range(self.n_class):
+            for j in range(num):
                 distance[i, j] = cosine(X_val[i], avg[j])
         acc = (np.argmax(Y_val, axis=1)==np.argmin(distance, axis=1)).sum()/X_val.shape[0]
         return acc
 
+    def enroll(self, X_train, name, model_name='lstm'):
+        """
+        注册一个陌生人到库中，以字典形式保存
+        :param X_train: 样本语音
+        :param name: 该样本语音的人名，唯一标识，不可重复。
+        :param model_name: 使用模型的名字，nn，lstm，gru
+        :return: none
+        """
+        spkModel = load_model('feature/d_vector/d_vector_{}.h5'.format(model_name))
+        X_train = spkModel.predict(X_train)
+        avg = X_train.mean(axis=0)
+        try:
+            with open('feature/d_vector/d_vector.pkl', 'rb') as f:
+                d_vector = pkl.load(f)
+        except:
+            d_vector = {}
+
+        if name in d_vector:
+            print("样本已经存在！！")
+        d_vector[name] = avg
+
+        with open('feature/d_vector/d_vector.pkl', 'wb') as f:
+            pkl.dump(d_vector, f)
+
+    def eval(self, target, model_name='lstm'):
+        spkModel = load_model('feature/d_vector/d_vector_{}.h5'.format(model_name))
+        target = spkModel.predict(target)
+        with open('feature/d_vector/d_vector.pkl', 'rb') as f:
+            d_vector = pkl.load(f)
+
+        min_distance = 1
+        target_name = None
+        distance_list = []
+        for name in d_vector.keys():
+            distance_list.append(cosine(target, d_vector[name]))
+            if min_distance > distance_list[-1]:
+                min_distance = distance_list[-1]
+                target_name = name
+
+        return target_name
+
 
 if __name__=="__main__":
     data_gen = Data_gen()
-    train_bm = True
+    train_bm = False
     model = nn_model()
     if train_bm:
         # 训练背景模型
         X_train, X_val, y_train, y_val = data_gen.load_data(reshape=False)
-        X_train = X_train[:, :, :,np.newaxis]
-        X_val = X_val[:, :, :,np.newaxis]
-        model.inference_gru(X_train, y_train, X_val, y_val)
+        # X_train = X_train[:, :, :,np.newaxis]
+        # X_val = X_val[:, :, :,np.newaxis]
+        model.inference_lstm(X_train, y_train, X_val, y_val)
 
-    X_train, y_train, X_val, y_val = data_gen.load_data()
-    acc = model.test(X_train, y_train, X_val, y_val)
+    # X_train, X_val, y_train, y_val = data_gen.load_data(test_size=0.3,datatype='test',reshape=False)
+    with open('feature/d_vector/MFCC_feature.pkl', 'rb') as f:
+        feature = pkl.load(f)
+
+    with open('feature/d_vector/MFCC_label.pkl', 'rb') as f:
+        label = pkl.load(f)
+    feature = np.array(feature)
+    label = np.array(label).reshape(-1, 1)
+    enc = preprocessing.OneHotEncoder()
+    label = enc.fit_transform(label).toarray()
+
+    X_train, X_val, y_train, y_val = train_test_split(feature, label, shuffle=True, test_size=0.1,
+                                                      random_state=2019)
+    start_time = get_time()
+    acc = model.test(X_train[:, :, :,np.newaxis], y_train, X_val[:, :, :,np.newaxis], y_val, model_name='lstm_conv')
+    print(get_time(start_time))
     print(acc)
