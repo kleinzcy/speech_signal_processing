@@ -62,11 +62,11 @@ rather than fastdtw if you prefer more on accuracy.
 
 [SIDEKIT](https://pypi.org/project/SIDEKIT/)
 
-#### MFCC+GMM
+## MFCC+GMM
 
 Please read report for more details.
 
-#### d-vector
+## d-vector
 
 we train our model on voxceleb dataset, more details, please read report.
 
